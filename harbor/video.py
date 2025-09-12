@@ -39,8 +39,9 @@ class CameraStreamTrack(VideoStreamTrack):
             self.picam2 = Picamera2()
             
             # Configure for maximum performance with correct color format
+            # Note: Picamera2 actually outputs BGR888 even when configured as RGB888
             config = self.picam2.create_video_configuration(
-                main={"size": size, "format": "RGB888"},  # Use RGB888 for correct colors
+                main={"size": size, "format": "RGB888"},  # Picamera2 will output BGR888 despite this setting
                 buffer_count=2,  # Reduce buffer count for lower latency
                 controls={"FrameRate": self.fps}  # Set frame rate explicitly
             )
@@ -274,8 +275,16 @@ class CameraStreamTrack(VideoStreamTrack):
                     img = np.zeros((h, w, 3), dtype=np.uint8)
                     img[:, :, 1] = 128  # Green tint to indicate no data
         
+        # Convert BGR to RGB for WebRTC (Picamera2 outputs BGR despite RGB888 config)
+        if not self.demo_mode and self.camera_available:
+            # Real camera: Convert BGR to RGB
+            img_rgb = img[:, :, ::-1]  # Reverse channel order: BGR -> RGB
+        else:
+            # Demo mode: Already in RGB format
+            img_rgb = img
+        
         # Convert to video frame with correct color format (RGB for WebRTC)
-        frame = av.VideoFrame.from_ndarray(img, format="rgb24")
+        frame = av.VideoFrame.from_ndarray(img_rgb, format="rgb24")
         
         # Set timestamp for A/V sync
         pts, time_base = await self.next_timestamp()

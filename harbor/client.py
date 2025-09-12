@@ -9,7 +9,7 @@ CLIENT_HTML = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
 <title>Harbor - WebRTC Camera Stream</title>
 <style>
 :root {
@@ -183,7 +183,10 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+}
+
+.connect-section button {
+  flex-shrink: 0;
 }
 
 .status-indicator {
@@ -493,22 +496,14 @@ input[type="number"]:focus {
   transform: translateY(1px);
 }
 
-/* Prevent layout shift on button press */
-button {
-  transform: translateY(0);
-  transition: all 0.15s ease;
-}
-
-button:active {
-  transform: translateY(1px);
-}
-
 /* Fix touch behavior on mobile */
 button {
-  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  -webkit-tap-highlight-color: rgba(37, 99, 235, 0.2);
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
+  transform: translateY(0);
+  transition: all 0.15s ease;
 }
 
 button:focus {
@@ -521,7 +516,7 @@ button:focus-visible {
 }
 
 button:active {
-  background-color: var(--primary-hover);
+  transform: translateY(1px);
 }
 
 @media (max-width: 767px) {
@@ -617,6 +612,10 @@ button:active {
     font-size: 0.9rem;
     touch-action: manipulation;
     -webkit-tap-highlight-color: rgba(37, 99, 235, 0.2);
+    cursor: pointer;
+    pointer-events: auto;
+    -webkit-user-select: none;
+    user-select: none;
   }
   
   .connect-section {
@@ -712,19 +711,17 @@ button:active {
   
   /* Prevent button transforms from breaking layout on mobile */
   .motor-btn, .motor-btn-small {
-    transform: none !important;
     -webkit-tap-highlight-color: rgba(37, 99, 235, 0.3);
     touch-action: manipulation;
+    cursor: pointer;
   }
   
   .motor-btn:active, .motor-btn-small:active {
-    transform: none !important;
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
     background-color: var(--primary-hover);
   }
   
   .motor-btn.active, .motor-btn-small.active {
-    transform: none !important;
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
   }
   
@@ -841,8 +838,8 @@ button:active {
           <div class="setting-group">
             <label for="resolution-select">Resolution:</label>
             <select id="resolution-select" class="setting-select">
-              <option value="160x120">160x120 (Ultra Low)</option>
-              <option value="240x180" selected>240x180 (Tiny)</option>
+            <option value="160x120" selected>160x120 (Ultra Low)</option>
+            <option value="240x180">240x180 (Tiny)</option>
               <option value="320x240">320x240 (Low)</option>
               <option value="480x360">480x360 (Medium)</option>
               <option value="640x480">640x480 (Standard)</option>
@@ -852,10 +849,10 @@ button:active {
             <label for="fps-select">Frame Rate:</label>
             <select id="fps-select" class="setting-select">
               <option value="5">5 FPS</option>
-              <option value="10" selected>10 FPS</option>
-              <option value="15">15 FPS</option>
-              <option value="20">20 FPS</option>
-              <option value="30">30 FPS</option>
+            <option value="10">10 FPS</option>
+            <option value="15">15 FPS</option>
+            <option value="20">20 FPS</option>
+            <option value="30" selected>30 FPS</option>
             </select>
           </div>
         </div>
@@ -865,6 +862,12 @@ button:active {
               <path d="M12 2L2 7v10c0 5.55 3.84 9.95 9 11 5.16-1.05 9-5.45 9-11V7l-10-5z"/>
             </svg>
             Connect
+          </button>
+          <button id="disconnect" class="btn-secondary" style="display: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/>
+            </svg>
+            Disconnect
           </button>
           <div class="status-indicator">
             <div id="status-dot" class="status-dot idle"></div>
@@ -981,6 +984,7 @@ const logEl = document.getElementById('log');
 const statusDot = document.getElementById('status-dot');
 const statusText = document.getElementById('status-text');
 const connectBtn = document.getElementById('connect');
+const disconnectBtn = document.getElementById('disconnect');
 const videoEl = document.getElementById('v');
 const videoPlaceholder = document.getElementById('video-placeholder');
 const demoNotice = document.getElementById('demo-notice');
@@ -1012,9 +1016,9 @@ let isDemoMode = false;
 let currentMotorState = 'stop';  // Track current motor state
 let motorTimeout = null;  // For auto-clearing active states
 let currentVideoSettings = {
-  width: 240,
-  height: 180,
-  fps: 10
+  width: 160,
+  height: 120,
+  fps: 30
 };
 
 // Utility functions
@@ -1031,10 +1035,22 @@ function updateStatus(status, text) {
 
 function updateUI(connecting) {
   isConnecting = connecting;
-  connectBtn.disabled = connecting;
+  const isConnected = pc && pc.iceConnectionState === 'connected';
+  
+  // Update connect button
+  connectBtn.disabled = connecting || isConnected;
   connectBtn.innerHTML = connecting 
     ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Connecting...'
     : '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7v10c0 5.55 3.84 9.95 9 11 5.16-1.05 9-5.45 9-11V7l-10-5z"/></svg>Connect';
+  
+  // Show/hide disconnect button
+  if (isConnected || connecting) {
+    connectBtn.style.display = 'none';
+    disconnectBtn.style.display = 'inline-flex';
+  } else {
+    connectBtn.style.display = 'inline-flex';
+    disconnectBtn.style.display = 'none';
+  }
   
   // Enable/disable controls based on connection
   const controlsDisabled = !ws || ws.readyState !== WebSocket.OPEN;
@@ -1261,6 +1277,7 @@ function cleanup() {
     ws.close();
     ws = null;
   }
+  isConnecting = false;
   isDemoMode = false;
   demoNotice.style.display = 'none';
   videoPlaceholder.classList.remove('hidden');
@@ -1268,8 +1285,18 @@ function cleanup() {
   updateUI(false);
 }
 
+// Disconnect function
+function disconnect() {
+  log('Disconnecting...');
+  updateStatus('disconnecting', 'Disconnecting...');
+  cleanup();
+  updateStatus('idle', 'Idle');
+  log('Disconnected');
+}
+
 // Event listeners
 connectBtn.addEventListener('click', start);
+disconnectBtn.addEventListener('click', disconnect);
 
 pingBtn.addEventListener('click', () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
@@ -1406,8 +1433,8 @@ function updateMotorButtonStates(activeMovement) {
 
 // Function to prevent button layout shift on mobile
 function preventLayoutShift(event) {
-  // Only blur to prevent keyboard popup, don't prevent default
-  if (event.target) {
+  // Only blur to prevent keyboard popup on mobile
+  if (event.target && window.innerWidth <= 767) {
     event.target.blur();
   }
 }
@@ -1458,14 +1485,26 @@ motorSpinRight.addEventListener('click', (e) => {
 const allMotorButtons = [motorForward, motorBackward, motorLeft, motorRight, motorStop, motorSpinLeft, motorSpinRight];
 allMotorButtons.forEach(button => {
   if (button) {
-    // Only prevent context menu on long press, allow normal touch events
+    // Only prevent context menu on long press
     button.addEventListener('contextmenu', (e) => {
       e.preventDefault();
     });
     
-    // Add touch-action CSS to prevent double-tap zoom
+    // Ensure proper touch behavior
     button.style.touchAction = 'manipulation';
+    button.style.pointerEvents = 'auto';
+    button.style.cursor = 'pointer';
   }
+});
+
+// Ensure all buttons work properly on mobile
+const allButtons = document.querySelectorAll('button');
+allButtons.forEach(button => {
+  button.style.touchAction = 'manipulation';
+  button.style.pointerEvents = 'auto';
+  button.style.cursor = 'pointer';
+  button.style.webkitUserSelect = 'none';
+  button.style.userSelect = 'none';
 });
 
 // Initialize UI

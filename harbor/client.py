@@ -743,6 +743,147 @@ button:active {
   }
 }
 
+/* Small mobile devices (375px and below) */
+@media (max-width: 375px) {
+  body {
+    padding: 2px;
+    font-size: 14px;
+  }
+  
+  .container {
+    padding: 0;
+    margin: 0;
+  }
+  
+  .header {
+    padding: 0 4px;
+    margin-bottom: 12px;
+  }
+  
+  .header h1 {
+    font-size: 1.3rem;
+    margin-bottom: 2px;
+  }
+  
+  .header p {
+    font-size: 0.9rem;
+  }
+  
+  .main-grid {
+    gap: 12px;
+  }
+  
+  .video-controls {
+    padding: 10px;
+  }
+  
+  .video-settings {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 8px;
+    margin-bottom: 10px;
+  }
+  
+  .setting-select {
+    padding: 6px;
+    font-size: 0.8rem;
+    min-height: 36px;
+  }
+  
+  .connect-section {
+    gap: 6px;
+  }
+  
+  button {
+    min-height: 44px;
+    font-size: 0.8rem;
+    padding: 8px 12px;
+  }
+  
+  .controls-section {
+    padding: 10px;
+  }
+  
+  .control-group {
+    margin-bottom: 14px;
+  }
+  
+  .control-group h3 {
+    font-size: 0.95rem;
+    margin-bottom: 8px;
+  }
+  
+  /* Motor controls for 375px */
+  .speed-control {
+    gap: 6px;
+  }
+  
+  #speed-value {
+    font-size: 1rem;
+    min-width: 35px;
+  }
+  
+  .movement-grid {
+    gap: 4px;
+  }
+  
+  .motor-row {
+    gap: 4px;
+  }
+  
+  .motor-btn {
+    min-height: 44px !important;
+    min-width: 44px;
+    font-size: 0.7rem;
+    padding: 4px 2px;
+  }
+  
+  .motor-btn svg {
+    width: 14px;
+    height: 14px;
+    margin-bottom: 1px;
+  }
+  
+  .motor-advanced {
+    gap: 4px;
+  }
+  
+  .motor-btn-small {
+    min-height: 38px !important;
+    min-width: 38px;
+    font-size: 0.65rem;
+    padding: 4px 2px;
+  }
+  
+  .motor-btn-small svg {
+    width: 12px;
+    height: 12px;
+  }
+  
+  .log-container {
+    height: 100px;
+    font-size: 0.7rem;
+    padding: 8px;
+    line-height: 1.3;
+  }
+  
+  /* LED controls */
+  .pin-input input {
+    max-width: 80px;
+    padding: 6px 8px;
+  }
+  
+  /* Status indicator */
+  .status-indicator {
+    font-size: 0.8rem;
+  }
+  
+  .status-dot {
+    width: 6px;
+    height: 6px;
+  }
+}
+
 /* Extra small mobile devices */
 @media (max-width: 480px) {
   body {
@@ -1035,7 +1176,7 @@ function updateStatus(status, text) {
 
 function updateUI(connecting) {
   isConnecting = connecting;
-  const isConnected = pc && pc.iceConnectionState === 'connected';
+  const isConnected = pc && (pc.iceConnectionState === 'connected' || pc.connectionState === 'connected');
   
   // Update connect button
   connectBtn.disabled = connecting || isConnected;
@@ -1069,8 +1210,9 @@ function updateUI(connecting) {
   motorSpeedSlider.disabled = controlsDisabled;
   
   // Enable/disable video settings (only when not connected)
-  resolutionSelect.disabled = connecting || (pc && pc.connectionState !== 'closed');
-  fpsSelect.disabled = connecting || (pc && pc.connectionState !== 'closed');
+  const videoSettingsDisabled = connecting || (pc && pc.connectionState !== 'closed' && pc.iceConnectionState !== 'closed');
+  resolutionSelect.disabled = videoSettingsDisabled;
+  fpsSelect.disabled = videoSettingsDisabled;
 }
 
 // Demo mode fallback
@@ -1119,7 +1261,10 @@ function createDemoStream() {
 
 // Main connection function
 async function start() {
-  if (pc || isConnecting) return;
+  if (pc || isConnecting) {
+    log('Connection already exists or in progress');
+    return;
+  }
   
   updateStatus('connecting', 'Connecting...');
   updateUI(true);
@@ -1129,11 +1274,26 @@ async function start() {
   pc = new RTCPeerConnection({iceServers: []});
     
     pc.oniceconnectionstatechange = () => {
-      log('WebRTC state:', pc.iceConnectionState);
-      if (pc.iceConnectionState === 'connected') {
+      log('WebRTC ICE state:', pc.iceConnectionState);
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         updateStatus('connected', 'Connected');
         videoPlaceholder.classList.add('hidden');
+        updateUI(false); // Update UI to show disconnect button
       } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
+        updateStatus('error', 'Connection failed');
+        cleanup();
+      } else if (pc.iceConnectionState === 'disconnected') {
+        updateStatus('error', 'Disconnected');
+        cleanup();
+      }
+    };
+    
+    pc.onconnectionstatechange = () => {
+      log('WebRTC connection state:', pc.connectionState);
+      if (pc.connectionState === 'connected') {
+        updateStatus('connected', 'Connected');
+        updateUI(false);
+      } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         updateStatus('error', 'Connection failed');
         cleanup();
       }
@@ -1269,19 +1429,47 @@ async function setupWebSocket() {
 }
 
 function cleanup() {
+  // Close WebRTC peer connection
   if (pc) {
+    // Stop all tracks
+    if (pc.getSenders) {
+      pc.getSenders().forEach(sender => {
+        if (sender.track) {
+          sender.track.stop();
+        }
+      });
+    }
+    if (pc.getReceivers) {
+      pc.getReceivers().forEach(receiver => {
+        if (receiver.track) {
+          receiver.track.stop();
+        }
+      });
+    }
     pc.close();
     pc = null;
   }
+  
+  // Close WebSocket
   if (ws) {
     ws.close();
     ws = null;
   }
+  
+  // Stop video stream
+  if (videoEl.srcObject) {
+    const stream = videoEl.srcObject;
+    if (stream.getTracks) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+    videoEl.srcObject = null;
+  }
+  
+  // Reset state
   isConnecting = false;
   isDemoMode = false;
   demoNotice.style.display = 'none';
   videoPlaceholder.classList.remove('hidden');
-  videoEl.srcObject = null;
   updateUI(false);
 }
 

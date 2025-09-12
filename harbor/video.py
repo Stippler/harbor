@@ -25,7 +25,7 @@ class CameraStreamTrack(VideoStreamTrack):
             size: Camera resolution as (width, height) tuple
         """
         super().__init__()
-        self.fps = max(5, int(fps))  # Minimum 5 fps for stability
+        self.fps = max(5, min(30, int(fps)))  # Clamp FPS between 5-30 for stability
         self.size = size
         self.frame_queue = Queue(maxsize=3)  # Small buffer for low latency
         self.camera_thread = None
@@ -38,10 +38,11 @@ class CameraStreamTrack(VideoStreamTrack):
             from picamera2 import Picamera2
             self.picam2 = Picamera2()
             
-            # Configure for maximum performance
+            # Configure for maximum performance with correct color format
             config = self.picam2.create_video_configuration(
-                main={"size": size, "format": "RGB888"},
-                buffer_count=4  # Optimize buffer count
+                main={"size": size, "format": "BGR888"},  # Use BGR for correct colors
+                buffer_count=2,  # Reduce buffer count for lower latency
+                controls={"FrameRate": self.fps}  # Set frame rate explicitly
             )
             self.picam2.configure(config)
             
@@ -273,8 +274,8 @@ class CameraStreamTrack(VideoStreamTrack):
                     img = np.zeros((h, w, 3), dtype=np.uint8)
                     img[:, :, 1] = 128  # Green tint to indicate no data
         
-        # Convert to video frame
-        frame = av.VideoFrame.from_ndarray(img, format="rgb24")
+        # Convert to video frame with correct color format
+        frame = av.VideoFrame.from_ndarray(img, format="bgr24")
         
         # Set timestamp for A/V sync
         pts, time_base = await self.next_timestamp()

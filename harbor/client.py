@@ -432,6 +432,44 @@ input[type="number"]:focus {
   padding: 6px 12px;
 }
 
+/* Button active/pressed states */
+.motor-btn.active {
+  background: var(--primary-hover);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  transform: translateY(1px);
+}
+
+.motor-btn.active.btn-danger {
+  background: var(--danger-hover);
+}
+
+.motor-btn-small.active {
+  background: var(--secondary);
+  color: var(--text);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  transform: translateY(1px);
+}
+
+/* Prevent layout shift on button press */
+button {
+  transform: translateY(0);
+  transition: all 0.15s ease;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+/* Fix touch behavior on mobile */
+button:focus {
+  outline: none;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 @media (max-width: 767px) {
   body {
     padding: 8px;
@@ -601,6 +639,21 @@ input[type="number"]:focus {
   /* Fix any potential overflow issues */
   * {
     max-width: 100%;
+  }
+  
+  /* Prevent button transforms from breaking layout on mobile */
+  .motor-btn, .motor-btn-small {
+    transform: none !important;
+  }
+  
+  .motor-btn:active, .motor-btn-small:active {
+    transform: none !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
+  
+  .motor-btn.active, .motor-btn-small.active {
+    transform: none !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
   }
   
   .demo-mode {
@@ -847,6 +900,8 @@ let pc = null;
 let ws = null;
 let isConnecting = false;
 let isDemoMode = false;
+let currentMotorState = 'stop';  // Track current motor state
+let motorTimeout = null;  // For auto-clearing active states
 
 // Utility functions
 function log(...args) {
@@ -964,10 +1019,10 @@ async function start() {
 
     // Try to connect to server
     const response = await fetch('/offer', {
-      method: 'POST',
+    method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({sdp: offer.sdp, type: offer.type})
-    });
+    body: JSON.stringify({sdp: offer.sdp, type: offer.type})
+  });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -981,7 +1036,7 @@ async function start() {
       throw new Error(answer.error);
     }
     
-    await pc.setRemoteDescription(answer);
+  await pc.setRemoteDescription(answer);
 
     // Setup WebSocket
     await setupWebSocket();
@@ -1159,9 +1214,76 @@ function sendMotorCommand(movement, speed = null) {
     
     ws.send(JSON.stringify(command));
     log(`Motor command: ${movement} at ${(speedValue * 100).toFixed(0)}%`);
+    
+    // Update button states
+    updateMotorButtonStates(movement);
+    
   } catch (error) {
     log(`Error sending motor command: ${error.message}`);
   }
+}
+
+// Update motor button active states
+function updateMotorButtonStates(activeMovement) {
+  // Clear all active states first
+  const motorButtons = [motorForward, motorBackward, motorLeft, motorRight, motorStop, motorSpinLeft, motorSpinRight];
+  motorButtons.forEach(btn => {
+    if (btn) btn.classList.remove('active');
+  });
+  
+  // Clear any existing timeout
+  if (motorTimeout) {
+    clearTimeout(motorTimeout);
+    motorTimeout = null;
+  }
+  
+  // Set active state for current movement
+  currentMotorState = activeMovement;
+  let activeButton = null;
+  
+  switch (activeMovement) {
+    case 'forward':
+      activeButton = motorForward;
+      break;
+    case 'backward':
+      activeButton = motorBackward;
+      break;
+    case 'left':
+      activeButton = motorLeft;
+      break;
+    case 'right':
+      activeButton = motorRight;
+      break;
+    case 'stop':
+      activeButton = motorStop;
+      break;
+    case 'spin_left':
+      activeButton = motorSpinLeft;
+      break;
+    case 'spin_right':
+      activeButton = motorSpinRight;
+      break;
+  }
+  
+  if (activeButton) {
+    activeButton.classList.add('active');
+    
+    // Auto-clear active state after movement (except for stop)
+    if (activeMovement !== 'stop') {
+      motorTimeout = setTimeout(() => {
+        activeButton.classList.remove('active');
+        currentMotorState = 'stop';
+        motorStop.classList.add('active');
+      }, 2000); // Clear after 2 seconds
+    }
+  }
+}
+
+// Function to prevent button layout shift on mobile
+function preventLayoutShift(event) {
+  event.preventDefault();
+  event.target.blur(); // Remove focus to prevent keyboard popup
+  return false;
 }
 
 // Speed slider update
@@ -1170,18 +1292,66 @@ motorSpeedSlider.addEventListener('input', () => {
   speedValue.textContent = value + '%';
 });
 
-// Motor control event listeners
-motorForward.addEventListener('click', () => sendMotorCommand('forward'));
-motorBackward.addEventListener('click', () => sendMotorCommand('backward'));
-motorLeft.addEventListener('click', () => sendMotorCommand('left'));
-motorRight.addEventListener('click', () => sendMotorCommand('right'));
-motorStop.addEventListener('click', () => sendMotorCommand('stop', 0));
-motorSpinLeft.addEventListener('click', () => sendMotorCommand('spin_left'));
-motorSpinRight.addEventListener('click', () => sendMotorCommand('spin_right'));
+// Motor control event listeners with layout shift prevention
+motorForward.addEventListener('click', (e) => {
+  preventLayoutShift(e);
+  sendMotorCommand('forward');
+});
+
+motorBackward.addEventListener('click', (e) => {
+  preventLayoutShift(e);
+  sendMotorCommand('backward');
+});
+
+motorLeft.addEventListener('click', (e) => {
+  preventLayoutShift(e);
+  sendMotorCommand('left');
+});
+
+motorRight.addEventListener('click', (e) => {
+  preventLayoutShift(e);
+  sendMotorCommand('right');
+});
+
+motorStop.addEventListener('click', (e) => {
+  preventLayoutShift(e);
+  sendMotorCommand('stop', 0);
+});
+
+motorSpinLeft.addEventListener('click', (e) => {
+  preventLayoutShift(e);
+  sendMotorCommand('spin_left');
+});
+
+motorSpinRight.addEventListener('click', (e) => {
+  preventLayoutShift(e);
+  sendMotorCommand('spin_right');
+});
+
+// Add touch event listeners to prevent layout issues on mobile
+const allMotorButtons = [motorForward, motorBackward, motorLeft, motorRight, motorStop, motorSpinLeft, motorSpinRight];
+allMotorButtons.forEach(button => {
+  if (button) {
+    // Prevent default touch behavior that might cause layout shifts
+    button.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+    }, { passive: false });
+    
+    button.addEventListener('touchend', (e) => {
+      e.preventDefault();
+    }, { passive: false });
+    
+    // Prevent context menu on long press
+    button.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+  }
+});
 
 // Initialize UI
 updateStatus('idle', 'Idle');
 updateUI(false);
+updateMotorButtonStates('stop'); // Initialize with stop state active
 log('Harbor client initialized');
 log('Click Connect to start streaming');
 

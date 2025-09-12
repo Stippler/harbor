@@ -48,13 +48,13 @@ async def on_shutdown(app: web.Application):
     )
 
 
-def create_app(width=640, height=480, fps=30, enable_motors=True):
+def create_app(width=320, height=240, fps=15, enable_motors=True):
     """Create and configure the Harbor application for live camera streaming.
     
     Args:
-        width: Video width in pixels (default: 640)
-        height: Video height in pixels (default: 480)
-        fps: Frames per second for camera stream (default: 30)
+        width: Video width in pixels (default: 320)
+        height: Video height in pixels (default: 240)
+        fps: Frames per second for camera stream (default: 15)
         enable_motors: Enable motor controller (default: True)
         
     Returns:

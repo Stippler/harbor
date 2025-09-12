@@ -169,6 +169,8 @@ body {
   color: var(--text);
   font-size: 0.85rem;
   cursor: pointer;
+  touch-action: manipulation;
+  min-height: 40px;
 }
 
 .setting-select:focus {
@@ -328,6 +330,7 @@ input[type="number"] {
   color: var(--text);
   width: 80px;
   text-align: center;
+  touch-action: manipulation;
 }
 
 input[type="number"]:focus {
@@ -401,6 +404,7 @@ input[type="number"]:focus {
   background: var(--border);
   outline: none;
   -webkit-appearance: none;
+  touch-action: manipulation;
 }
 
 .speed-slider::-webkit-slider-thumb {
@@ -500,6 +504,13 @@ button:active {
 }
 
 /* Fix touch behavior on mobile */
+button {
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 button:focus {
   outline: none;
 }
@@ -507,6 +518,10 @@ button:focus {
 button:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
+}
+
+button:active {
+  background-color: var(--primary-hover);
 }
 
 @media (max-width: 767px) {
@@ -597,8 +612,11 @@ button:focus-visible {
   button {
     flex: none;
     width: 100%;
-    min-height: 44px;
+    min-height: 48px;
+    min-width: 48px;
     font-size: 0.9rem;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(37, 99, 235, 0.2);
   }
   
   .connect-section {
@@ -695,16 +713,30 @@ button:focus-visible {
   /* Prevent button transforms from breaking layout on mobile */
   .motor-btn, .motor-btn-small {
     transform: none !important;
+    -webkit-tap-highlight-color: rgba(37, 99, 235, 0.3);
+    touch-action: manipulation;
   }
   
   .motor-btn:active, .motor-btn-small:active {
     transform: none !important;
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+    background-color: var(--primary-hover);
   }
   
   .motor-btn.active, .motor-btn-small.active {
     transform: none !important;
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
+  
+  /* Ensure buttons are properly sized for touch */
+  .motor-btn {
+    min-height: 48px !important;
+    min-width: 48px;
+  }
+  
+  .motor-btn-small {
+    min-height: 44px !important;
+    min-width: 44px;
   }
   
   .demo-mode {
@@ -1374,9 +1406,10 @@ function updateMotorButtonStates(activeMovement) {
 
 // Function to prevent button layout shift on mobile
 function preventLayoutShift(event) {
-  event.preventDefault();
-  event.target.blur(); // Remove focus to prevent keyboard popup
-  return false;
+  // Only blur to prevent keyboard popup, don't prevent default
+  if (event.target) {
+    event.target.blur();
+  }
 }
 
 // Speed slider update
@@ -1425,19 +1458,13 @@ motorSpinRight.addEventListener('click', (e) => {
 const allMotorButtons = [motorForward, motorBackward, motorLeft, motorRight, motorStop, motorSpinLeft, motorSpinRight];
 allMotorButtons.forEach(button => {
   if (button) {
-    // Prevent default touch behavior that might cause layout shifts
-    button.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-    }, { passive: false });
-    
-    button.addEventListener('touchend', (e) => {
-      e.preventDefault();
-    }, { passive: false });
-    
-    // Prevent context menu on long press
+    // Only prevent context menu on long press, allow normal touch events
     button.addEventListener('contextmenu', (e) => {
       e.preventDefault();
     });
+    
+    // Add touch-action CSS to prevent double-tap zoom
+    button.style.touchAction = 'manipulation';
   }
 });
 

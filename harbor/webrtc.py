@@ -38,12 +38,18 @@ async def offer_handler(request: web.Request):
                 if hasattr(track.track, 'stop_camera'):
                     track.track.stop_camera()
 
-    # Create and start camera stream track
+    # Get video settings from request (if provided)
+    video_width = params.get("width", app["width"])
+    video_height = params.get("height", app["height"])
+    video_fps = params.get("fps", app["fps"])
+    
+    # Create and start camera stream track with custom settings
     try:
-        camera_track = CameraStreamTrack(app["fps"], (app["width"], app["height"]))
+        camera_track = CameraStreamTrack(video_fps, (video_width, video_height))
         camera_track.start_camera()
         pc.addTrack(camera_track)
-        logging.info("Camera track added to peer connection (demo mode: %s)", camera_track.demo_mode)
+        logging.info("Camera track added: %dx%d @ %d fps (demo mode: %s)", 
+                    video_width, video_height, video_fps, camera_track.demo_mode)
     except Exception as e:
         logging.error("Failed to create camera track: %s", e)
         # Return error response

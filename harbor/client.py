@@ -138,6 +138,45 @@ body {
   background: var(--surface-alt);
 }
 
+.video-settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.setting-group label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.setting-select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.setting-select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgb(37 99 235 / 0.1);
+}
+
 .connect-section {
   display: flex;
   align-items: center;
@@ -521,6 +560,18 @@ button:focus-visible {
     padding: 16px;
   }
   
+  .video-settings {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 10px;
+    margin-bottom: 12px;
+  }
+  
+  .setting-select {
+    padding: 8px;
+    font-size: 0.9rem;
+  }
+  
   .controls-section {
     padding: 16px;
     margin: 0;
@@ -754,6 +805,28 @@ button:focus-visible {
         <div id="demo-notice" class="demo-mode" style="display: none;">
           <strong>Demo Mode:</strong> Camera not available. Using placeholder video stream.
         </div>
+        <div class="video-settings">
+          <div class="setting-group">
+            <label for="resolution-select">Resolution:</label>
+            <select id="resolution-select" class="setting-select">
+              <option value="160x120">160x120 (Ultra Low)</option>
+              <option value="240x180" selected>240x180 (Tiny)</option>
+              <option value="320x240">320x240 (Low)</option>
+              <option value="480x360">480x360 (Medium)</option>
+              <option value="640x480">640x480 (Standard)</option>
+            </select>
+          </div>
+          <div class="setting-group">
+            <label for="fps-select">Frame Rate:</label>
+            <select id="fps-select" class="setting-select">
+              <option value="5">5 FPS</option>
+              <option value="10" selected>10 FPS</option>
+              <option value="15">15 FPS</option>
+              <option value="20">20 FPS</option>
+              <option value="30">30 FPS</option>
+            </select>
+          </div>
+        </div>
         <div class="connect-section">
           <button id="connect" class="btn-primary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -895,6 +968,10 @@ const motorStop = document.getElementById('motor-stop');
 const motorSpinLeft = document.getElementById('motor-spin-left');
 const motorSpinRight = document.getElementById('motor-spin-right');
 
+// Video settings elements
+const resolutionSelect = document.getElementById('resolution-select');
+const fpsSelect = document.getElementById('fps-select');
+
 // State
 let pc = null;
 let ws = null;
@@ -902,6 +979,11 @@ let isConnecting = false;
 let isDemoMode = false;
 let currentMotorState = 'stop';  // Track current motor state
 let motorTimeout = null;  // For auto-clearing active states
+let currentVideoSettings = {
+  width: 240,
+  height: 180,
+  fps: 10
+};
 
 // Utility functions
 function log(...args) {
@@ -937,6 +1019,10 @@ function updateUI(connecting) {
   motorSpinLeft.disabled = controlsDisabled;
   motorSpinRight.disabled = controlsDisabled;
   motorSpeedSlider.disabled = controlsDisabled;
+  
+  // Enable/disable video settings (only when not connected)
+  resolutionSelect.disabled = connecting || (pc && pc.connectionState !== 'closed');
+  fpsSelect.disabled = connecting || (pc && pc.connectionState !== 'closed');
 }
 
 // Demo mode fallback
@@ -1017,12 +1103,19 @@ async function start() {
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-    // Try to connect to server
+    // Try to connect to server with video settings
+    const videoSettings = getVideoSettings();
     const response = await fetch('/offer', {
     method: 'POST',
       headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({sdp: offer.sdp, type: offer.type})
-  });
+      body: JSON.stringify({
+        sdp: offer.sdp, 
+        type: offer.type,
+        width: videoSettings.width,
+        height: videoSettings.height,
+        fps: videoSettings.fps
+      })
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -1354,6 +1447,28 @@ updateUI(false);
 updateMotorButtonStates('stop'); // Initialize with stop state active
 log('Harbor client initialized');
 log('Click Connect to start streaming');
+
+// Video settings change handlers
+resolutionSelect.addEventListener('change', () => {
+  const resolution = resolutionSelect.value.split('x');
+  currentVideoSettings.width = parseInt(resolution[0]);
+  currentVideoSettings.height = parseInt(resolution[1]);
+  log(`Resolution changed to ${currentVideoSettings.width}x${currentVideoSettings.height}`);
+});
+
+fpsSelect.addEventListener('change', () => {
+  currentVideoSettings.fps = parseInt(fpsSelect.value);
+  log(`Frame rate changed to ${currentVideoSettings.fps} FPS`);
+});
+
+// Function to get current video settings
+function getVideoSettings() {
+  return {
+    width: currentVideoSettings.width,
+    height: currentVideoSettings.height,
+    fps: currentVideoSettings.fps
+  };
+}
 
 // Cleanup on page unload
 window.addEventListener('beforeunload', cleanup);

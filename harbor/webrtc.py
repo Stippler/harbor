@@ -39,9 +39,17 @@ async def offer_handler(request: web.Request):
                     track.track.stop_camera()
 
     # Create and start camera stream track
-    camera_track = CameraStreamTrack(app["fps"], (app["width"], app["height"]))
-    camera_track.start_camera()
-    pc.addTrack(camera_track)
+    try:
+        camera_track = CameraStreamTrack(app["fps"], (app["width"], app["height"]))
+        camera_track.start_camera()
+        pc.addTrack(camera_track)
+        logging.info("Camera track added to peer connection (demo mode: %s)", camera_track.demo_mode)
+    except Exception as e:
+        logging.error("Failed to create camera track: %s", e)
+        # Return error response
+        return web.json_response({
+            "error": f"Camera initialization failed: {e}"
+        }, status=500)
     
     # Store camera track for cleanup
     if "camera_tracks" not in app:

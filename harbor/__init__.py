@@ -14,6 +14,7 @@ from aiohttp import web
 
 from .client import index_handler
 from .led import LedController
+from .motor import create_motor_controller
 from .webrtc import offer_handler
 from .websocket import websocket_handler
 
@@ -21,8 +22,8 @@ from .websocket import websocket_handler
 async def on_shutdown(app: web.Application):
     """Clean shutdown handler for the application.
     
-    Closes all WebSocket connections, stops camera streams, and 
-    closes RTCPeerConnections gracefully.
+    Closes all WebSocket connections, stops camera streams, 
+    stops motors, and closes RTCPeerConnections gracefully.
     
     Args:
         app: aiohttp application instance
@@ -36,6 +37,10 @@ async def on_shutdown(app: web.Application):
         for camera_track in list(app["camera_tracks"]):
             camera_track.stop_camera()
     
+    # Stop all motors and cleanup
+    if "motor" in app:
+        app["motor"].cleanup()
+    
     # Close peer connections
     await asyncio.gather(
         *(pc.close() for pc in list(app["pcs"])), 
@@ -43,13 +48,14 @@ async def on_shutdown(app: web.Application):
     )
 
 
-def create_app(width=640, height=480, fps=30):
+def create_app(width=640, height=480, fps=30, enable_motors=True):
     """Create and configure the Harbor application for live camera streaming.
     
     Args:
         width: Video width in pixels (default: 640)
         height: Video height in pixels (default: 480)
         fps: Frames per second for camera stream (default: 30)
+        enable_motors: Enable motor controller (default: True)
         
     Returns:
         web.Application: Configured aiohttp application
@@ -64,6 +70,17 @@ def create_app(width=640, height=480, fps=30):
     app["pcs"] = set()  # RTCPeerConnection instances
     app["sockets"] = set()  # WebSocket connections
     app["camera_tracks"] = set()  # Active camera tracks
+    
+    # Initialize motor controller
+    if enable_motors:
+        try:
+            app["motor"] = create_motor_controller("l298n_default")
+            logging.info("Motor controller initialized")
+        except Exception as e:
+            logging.warning("Motor controller initialization failed: %s", e)
+            app["motor"] = None
+    else:
+        app["motor"] = None
     
     logging.info("Harbor application created for live camera streaming (%dx%d @ %d fps)", 
                 width, height, fps)
@@ -82,7 +99,8 @@ def create_app(width=640, height=480, fps=30):
 # Expose main components for external use
 __all__ = [
     "create_app",
-    "LedController", 
+    "LedController",
+    "create_motor_controller",
     "index_handler",
     "offer_handler", 
     "websocket_handler"

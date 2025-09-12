@@ -31,6 +31,7 @@ class CameraStreamTrack(VideoStreamTrack):
         self.camera_thread = None
         self.running = False
         self.last_frame = None
+        self.demo_mode = False  # Initialize demo_mode attribute
         
         # Initialize camera
         try:
@@ -46,6 +47,7 @@ class CameraStreamTrack(VideoStreamTrack):
             
             logging.info("Camera initialized: %dx%d @ %d fps", size[0], size[1], fps)
             self.camera_available = True
+            self.demo_mode = False  # Real camera mode
             
         except Exception as e:
             logging.warning("Camera initialization failed, enabling demo mode: %s", e)
@@ -62,10 +64,24 @@ class CameraStreamTrack(VideoStreamTrack):
         self.running = True
         
         if self.camera_available and self.picam2:
-            self.picam2.start()
-            self.camera_thread = threading.Thread(target=self._capture_loop, daemon=True)
-            self.camera_thread.start()
-            logging.info("Camera capture started")
+            try:
+                self.picam2.start()
+                self.camera_thread = threading.Thread(target=self._capture_loop, daemon=True)
+                self.camera_thread.start()
+                logging.info("Camera capture started")
+            except Exception as e:
+                logging.error("Failed to start camera, falling back to demo mode: %s", e)
+                # Fall back to demo mode
+                self.camera_available = False
+                self.demo_mode = True
+                if self.picam2:
+                    try:
+                        self.picam2.stop()
+                    except:
+                        pass
+                self.camera_thread = threading.Thread(target=self._demo_loop, daemon=True)
+                self.camera_thread.start()
+                logging.info("Demo mode started (camera fallback)")
         else:
             # Start demo mode
             self.camera_thread = threading.Thread(target=self._demo_loop, daemon=True)
@@ -94,8 +110,16 @@ class CameraStreamTrack(VideoStreamTrack):
             try:
                 start_time = time.time()
                 
-                # Capture frame directly as numpy array
-                frame_array = self.picam2.capture_array()
+                # Capture frame directly as numpy array with timeout handling
+                try:
+                    frame_array = self.picam2.capture_array()
+                except Exception as capture_error:
+                    logging.warning("Camera capture failed: %s", capture_error)
+                    # Generate a black frame as fallback
+                    h, w = self.size[1], self.size[0]
+                    frame_array = np.zeros((h, w, 3), dtype=np.uint8)
+                    # Add error text overlay
+                    frame_array[:, :, 0] = 64  # Red tint to indicate error
                 
                 # Store latest frame (non-blocking)
                 self.last_frame = frame_array
@@ -119,8 +143,8 @@ class CameraStreamTrack(VideoStreamTrack):
                     time.sleep(sleep_time)
                     
             except Exception as e:
-                logging.error("Camera capture error: %s", e)
-                time.sleep(0.1)  # Brief pause on error
+                logging.error("Camera capture loop error: %s", e)
+                time.sleep(0.5)  # Longer pause on loop error
     
     def _demo_loop(self):
         """Demo mode loop that generates synthetic video frames."""

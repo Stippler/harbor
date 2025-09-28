@@ -355,6 +355,54 @@ input[type="number"]:focus {
   border: 1px solid var(--border);
 }
 
+.boats-container {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  min-height: 100px;
+  background: var(--surface-alt);
+}
+
+.boat-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.boat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.boat-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.boat-details {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.boat-status {
+  color: var(--text-secondary);
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+}
+
+.boat-connect-btn {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  min-height: 32px;
+}
+
 .log-container::-webkit-scrollbar {
   width: 6px;
 }
@@ -955,8 +1003,8 @@ button:active {
 <body>
 <div class="container">
   <header class="header">
-    <h1>Harbor Camera Stream</h1>
-    <p>WebRTC live streaming with GPIO control</p>
+    <h1>Harbor Relay Server</h1>
+    <p>WebRTC boat camera streaming relay</p>
   </header>
 
   <div class="main-grid">
@@ -972,29 +1020,20 @@ button:active {
         </div>
       </div>
       <div class="video-controls">
-        <div id="demo-notice" class="demo-mode" style="display: none;">
-          <strong>Demo Mode:</strong> Camera not available. Using placeholder video stream.
-        </div>
-        <div class="video-settings">
+        <div id="boat-selection" class="video-settings">
           <div class="setting-group">
-            <label for="resolution-select">Resolution:</label>
-            <select id="resolution-select" class="setting-select">
-            <option value="160x120" selected>160x120 (Ultra Low)</option>
-            <option value="240x180">240x180 (Tiny)</option>
-              <option value="320x240">320x240 (Low)</option>
-              <option value="480x360">480x360 (Medium)</option>
-              <option value="640x480">640x480 (Standard)</option>
+            <label for="boat-select">Select Boat:</label>
+            <select id="boat-select" class="setting-select">
+              <option value="" disabled selected>Loading boats...</option>
             </select>
           </div>
           <div class="setting-group">
-            <label for="fps-select">Frame Rate:</label>
-            <select id="fps-select" class="setting-select">
-              <option value="5">5 FPS</option>
-            <option value="10">10 FPS</option>
-            <option value="15">15 FPS</option>
-            <option value="20">20 FPS</option>
-            <option value="30" selected>30 FPS</option>
-            </select>
+            <button id="refresh-boats" class="btn-secondary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>
+              Refresh
+            </button>
           </div>
         </div>
         <div class="connect-section">
@@ -1020,102 +1059,16 @@ button:active {
 
     <aside class="controls-section">
       <div class="control-group">
-        <h3>LED Control</h3>
-        <div class="led-controls">
-          <div class="pin-input">
-            <label for="pin">GPIO Pin:</label>
-            <input id="pin" type="number" value="17" min="1" max="40">
-          </div>
-          <div class="button-group">
-            <button id="on" class="btn-success">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-              </svg>
-              LED ON
-            </button>
-            <button id="off" class="btn-danger">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-              </svg>
-              LED OFF
-            </button>
-          </div>
-    </div>
-  </div>
-
-      <div class="control-group">
-        <h3>Motor Control</h3>
-        <div class="motor-controls">
-          <div class="speed-control">
-            <label for="motor-speed">Speed:</label>
-            <input id="motor-speed" type="range" min="0" max="100" value="70" class="speed-slider">
-            <span id="speed-value">70%</span>
-          </div>
-          <div class="movement-grid">
-            <button id="motor-forward" class="btn-primary motor-btn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>
-              </svg>
-              Forward
-            </button>
-            <div class="motor-row">
-              <button id="motor-left" class="btn-primary motor-btn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M15.41 16.09l-4.58-4.59 4.58-4.59L14 5.5l-6 6 6 6z"/>
-                </svg>
-                Left
-              </button>
-              <button id="motor-stop" class="btn-danger motor-btn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M6 6h12v12H6z"/>
-                </svg>
-                Stop
-              </button>
-              <button id="motor-right" class="btn-primary motor-btn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M8.59 16.34l4.58-4.59-4.58-4.59L10 5.75l6 6-6 6z"/>
-                </svg>
-                Right
-              </button>
-            </div>
-            <button id="motor-backward" class="btn-primary motor-btn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M7.41 8.84L12 13.42l4.59-4.58L18 10l-6 6-6-6z"/>
-              </svg>
-              Backward
-            </button>
-          </div>
-          <div class="motor-advanced">
-            <button id="motor-spin-left" class="btn-secondary motor-btn-small">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6z"/>
-              </svg>
-              Spin Left
-            </button>
-            <button id="motor-spin-right" class="btn-secondary motor-btn-small">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8v-3l-4 4 4 4V6z"/>
-              </svg>
-              Spin Right
-            </button>
-          </div>
+        <h3>Available Boats</h3>
+        <div id="boats-list" class="boats-container">
+          <div class="boat-status">Loading boats...</div>
         </div>
       </div>
 
       <div class="control-group">
-        <h3>Network Test</h3>
-        <button id="ping" class="btn-secondary">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-          </svg>
-          Ping Server
-        </button>
-    </div>
-
-      <div class="control-group">
         <h3>Connection Log</h3>
         <div id="log" class="log-container"></div>
-    </div>
+      </div>
     </aside>
   </div>
 </div>
@@ -1128,39 +1081,16 @@ const connectBtn = document.getElementById('connect');
 const disconnectBtn = document.getElementById('disconnect');
 const videoEl = document.getElementById('v');
 const videoPlaceholder = document.getElementById('video-placeholder');
-const demoNotice = document.getElementById('demo-notice');
-const pinInput = document.getElementById('pin');
-const onBtn = document.getElementById('on');
-const offBtn = document.getElementById('off');
-const pingBtn = document.getElementById('ping');
-
-// Motor control elements
-const motorSpeedSlider = document.getElementById('motor-speed');
-const speedValue = document.getElementById('speed-value');
-const motorForward = document.getElementById('motor-forward');
-const motorBackward = document.getElementById('motor-backward');
-const motorLeft = document.getElementById('motor-left');
-const motorRight = document.getElementById('motor-right');
-const motorStop = document.getElementById('motor-stop');
-const motorSpinLeft = document.getElementById('motor-spin-left');
-const motorSpinRight = document.getElementById('motor-spin-right');
-
-// Video settings elements
-const resolutionSelect = document.getElementById('resolution-select');
-const fpsSelect = document.getElementById('fps-select');
+const boatSelect = document.getElementById('boat-select');
+const refreshBoatsBtn = document.getElementById('refresh-boats');
+const boatsListEl = document.getElementById('boats-list');
 
 // State
 let pc = null;
 let ws = null;
 let isConnecting = false;
-let isDemoMode = false;
-let currentMotorState = 'stop';  // Track current motor state
-let motorTimeout = null;  // For auto-clearing active states
-let currentVideoSettings = {
-  width: 160,
-  height: 120,
-  fps: 30
-};
+let availableBoats = [];
+let selectedBoatId = null;
 
 // Utility functions
 function log(...args) {
@@ -1179,7 +1109,7 @@ function updateUI(connecting) {
   const isConnected = pc && (pc.iceConnectionState === 'connected' || pc.connectionState === 'connected');
   
   // Update connect button
-  connectBtn.disabled = connecting || isConnected;
+  connectBtn.disabled = connecting || isConnected || !selectedBoatId;
   connectBtn.innerHTML = connecting 
     ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Connecting...'
     : '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7v10c0 5.55 3.84 9.95 9 11 5.16-1.05 9-5.45 9-11V7l-10-5z"/></svg>Connect';
@@ -1193,70 +1123,84 @@ function updateUI(connecting) {
     disconnectBtn.style.display = 'none';
   }
   
-  // Enable/disable controls based on connection
-  const controlsDisabled = !ws || ws.readyState !== WebSocket.OPEN;
-  onBtn.disabled = controlsDisabled;
-  offBtn.disabled = controlsDisabled;
-  pingBtn.disabled = controlsDisabled;
-  
-  // Enable/disable motor controls
-  motorForward.disabled = controlsDisabled;
-  motorBackward.disabled = controlsDisabled;
-  motorLeft.disabled = controlsDisabled;
-  motorRight.disabled = controlsDisabled;
-  motorStop.disabled = controlsDisabled;
-  motorSpinLeft.disabled = controlsDisabled;
-  motorSpinRight.disabled = controlsDisabled;
-  motorSpeedSlider.disabled = controlsDisabled;
-  
-  // Enable/disable video settings (only when not connected)
-  const videoSettingsDisabled = connecting || (pc && pc.connectionState !== 'closed' && pc.iceConnectionState !== 'closed');
-  resolutionSelect.disabled = videoSettingsDisabled;
-  fpsSelect.disabled = videoSettingsDisabled;
+  // Enable/disable boat selection
+  boatSelect.disabled = connecting || isConnected;
+  refreshBoatsBtn.disabled = connecting || isConnected;
 }
 
-// Demo mode fallback
-function createDemoStream() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 640;
-  canvas.height = 480;
-  const ctx = canvas.getContext('2d');
-  
-  // Create animated demo pattern
-  let frame = 0;
-  function drawFrame() {
-    // Gradient background
-    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-    gradient.addColorStop(0, '#1e293b');
-    gradient.addColorStop(1, '#334155');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+// Boat management functions
+async function loadBoats() {
+  try {
+    const response = await fetch('/boats');
+    if (!response.ok) {
+      throw new Error(`Failed to load boats: ${response.status}`);
+    }
     
-    // Animated circles
-    ctx.fillStyle = 'rgba(59, 130, 246, 0.6)';
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const radius = 50 + Math.sin(frame * 0.05) * 20;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-    ctx.fill();
+    const data = await response.json();
+    availableBoats = data.boats || [];
+    updateBoatsList();
+    updateBoatSelect();
+    log(`Loaded ${availableBoats.length} boats`);
     
-    // Demo text
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = 'bold 24px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText('DEMO MODE', centerX, centerY - 30);
-    ctx.font = '16px system-ui';
-    ctx.fillText('Camera simulation active', centerX, centerY + 10);
-    
-    frame++;
+  } catch (error) {
+    log('Failed to load boats:', error.message);
+    boatsListEl.innerHTML = '<div class="boat-status">Failed to load boats</div>';
+  }
+}
+
+function updateBoatsList() {
+  if (availableBoats.length === 0) {
+    boatsListEl.innerHTML = '<div class="boat-status">No boats available</div>';
+    return;
   }
   
-  // Update at 30fps
-  setInterval(drawFrame, 1000/30);
-  drawFrame(); // Initial frame
+  boatsListEl.innerHTML = availableBoats.map(boat => `
+    <div class="boat-item">
+      <div class="boat-info">
+        <div class="boat-name">${boat.boat_id}</div>
+        <div class="boat-details">
+          ${boat.capabilities.width}x${boat.capabilities.height} @ ${boat.capabilities.fps}fps
+          ${boat.connected ? '✓ Connected' : '✗ Offline'}
+        </div>
+      </div>
+      <button class="btn-primary boat-connect-btn" 
+              onclick="selectBoat('${boat.boat_id}')"
+              ${!boat.connected ? 'disabled' : ''}>
+        Select
+      </button>
+    </div>
+  `).join('');
+}
+
+function updateBoatSelect() {
+  const currentValue = boatSelect.value;
+  boatSelect.innerHTML = '<option value="" disabled>Select a boat...</option>';
   
-  return canvas.captureStream(30);
+  availableBoats.forEach(boat => {
+    if (boat.connected) {
+      const option = document.createElement('option');
+      option.value = boat.boat_id;
+      option.textContent = `${boat.boat_id} (${boat.capabilities.width}x${boat.capabilities.height})`;
+      boatSelect.appendChild(option);
+    }
+  });
+  
+  // Restore selection if still available
+  if (currentValue && availableBoats.find(b => b.boat_id === currentValue && b.connected)) {
+    boatSelect.value = currentValue;
+    selectedBoatId = currentValue;
+  } else {
+    selectedBoatId = null;
+  }
+  
+  updateUI(false);
+}
+
+function selectBoat(boatId) {
+  selectedBoatId = boatId;
+  boatSelect.value = boatId;
+  updateUI(false);
+  log(`Selected boat: ${boatId}`);
 }
 
 // Main connection function
@@ -1266,19 +1210,24 @@ async function start() {
     return;
   }
   
+  if (!selectedBoatId) {
+    log('No boat selected');
+    return;
+  }
+  
   updateStatus('connecting', 'Connecting...');
   updateUI(true);
-  log('Starting connection...');
+  log(`Starting connection to boat ${selectedBoatId}...`);
 
   try {
-  pc = new RTCPeerConnection({iceServers: []});
+    pc = new RTCPeerConnection({iceServers: []});
     
     pc.oniceconnectionstatechange = () => {
       log('WebRTC ICE state:', pc.iceConnectionState);
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         updateStatus('connected', 'Connected');
         videoPlaceholder.classList.add('hidden');
-        updateUI(false); // Update UI to show disconnect button
+        updateUI(false);
       } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
         updateStatus('error', 'Connection failed');
         cleanup();
@@ -1300,28 +1249,25 @@ async function start() {
     };
     
     pc.ontrack = (ev) => {
-      log('Received video stream');
+      log('Received video stream from boat');
       videoEl.srcObject = ev.streams[0];
       videoPlaceholder.classList.add('hidden');
     };
 
     // Request video stream
-  pc.addTransceiver('video', {direction: 'recvonly'});
+    pc.addTransceiver('video', {direction: 'recvonly'});
 
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
 
-    // Try to connect to server with video settings
-    const videoSettings = getVideoSettings();
+    // Send offer to relay server with boat ID
     const response = await fetch('/offer', {
-    method: 'POST',
+      method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         sdp: offer.sdp, 
         type: offer.type,
-        width: videoSettings.width,
-        height: videoSettings.height,
-        fps: videoSettings.fps
+        boat_id: selectedBoatId
       })
     });
 
@@ -1337,97 +1283,19 @@ async function start() {
       throw new Error(answer.error);
     }
     
-  await pc.setRemoteDescription(answer);
-
-    // Setup WebSocket
-    await setupWebSocket();
+    await pc.setRemoteDescription(answer);
+    log(`Connected to boat ${selectedBoatId} via relay`);
     
   } catch (error) {
     log('Connection failed:', error.message);
-    log('Falling back to demo mode...');
-    
-    // Enable demo mode
-    isDemoMode = true;
-    demoNotice.style.display = 'block';
-    
-    // Create demo video stream
-    const demoStream = createDemoStream();
-    videoEl.srcObject = demoStream;
-    videoPlaceholder.classList.add('hidden');
-    
-    // Setup WebSocket anyway (might work even if camera doesn't)
-    try {
-      await setupWebSocket();
-    } catch (wsError) {
-      log('WebSocket also failed:', wsError.message);
-      updateStatus('error', 'Demo mode (offline)');
-      updateUI(false);
-      return;
-    }
-    
-    updateStatus('connected', 'Demo mode');
+    updateStatus('error', 'Connection failed');
+    cleanup();
   }
   
   updateUI(false);
 }
 
-async function setupWebSocket() {
-  return new Promise((resolve, reject) => {
-  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(wsProto + '://' + location.host + '/ws');
-    
-    const timeout = setTimeout(() => {
-      reject(new Error('WebSocket connection timeout'));
-    }, 5000);
-    
-    ws.onopen = () => {
-      clearTimeout(timeout);
-      log('WebSocket connected');
-      updateUI(false);
-      resolve();
-    };
-    
-    ws.onmessage = (ev) => {
-      try {
-        const data = JSON.parse(ev.data);
-        if (data.type === 'hello') {
-          log('Server hello - GPIO enabled:', data.gpio, 'Motor enabled:', data.motor);
-        } else if (data.type === 'pong') {
-          const latency = Date.now() - data.data;
-          log(`Pong received (${latency}ms latency)`);
-        } else if (data.type === 'led') {
-          log('LED response:', JSON.stringify(data.result));
-        } else if (data.type === 'motor') {
-          if (data.result && data.result.status === 'error') {
-            log('Motor error:', data.result.message);
-          } else {
-            log('Motor response:', JSON.stringify(data.result));
-          }
-        } else if (data.type === 'error') {
-          log('Server error:', data.message);
-        } else {
-          log('Server message:', ev.data);
-        }
-      } catch (e) {
-        log('Raw message:', ev.data);
-      }
-    };
-    
-    ws.onerror = (e) => {
-      clearTimeout(timeout);
-      log('WebSocket error:', e.message || 'Connection failed');
-      reject(e);
-    };
-    
-    ws.onclose = () => {
-      log('WebSocket closed');
-      updateStatus('error', 'Disconnected');
-      updateUI(false);
-      cleanup();
-    };
-  });
-}
-
+// Cleanup function
 function cleanup() {
   // Close WebRTC peer connection
   if (pc) {
@@ -1450,12 +1318,6 @@ function cleanup() {
     pc = null;
   }
   
-  // Close WebSocket
-  if (ws) {
-    ws.close();
-    ws = null;
-  }
-  
   // Stop video stream
   if (videoEl.srcObject) {
     const stream = videoEl.srcObject;
@@ -1467,8 +1329,6 @@ function cleanup() {
   
   // Reset state
   isConnecting = false;
-  isDemoMode = false;
-  demoNotice.style.display = 'none';
   videoPlaceholder.classList.remove('hidden');
   updateUI(false);
 }
@@ -1486,243 +1346,25 @@ function disconnect() {
 connectBtn.addEventListener('click', start);
 disconnectBtn.addEventListener('click', disconnect);
 
-pingBtn.addEventListener('click', () => {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    const timestamp = Date.now();
-    ws.send(JSON.stringify({cmd: 'ping', data: timestamp}));
-    log('Ping sent...');
-  } else {
-    log('WebSocket not connected');
-  }
-});
+refreshBoatsBtn.addEventListener('click', loadBoats);
 
-onBtn.addEventListener('click', () => {
-  const pin = parseInt(pinInput.value);
-  if (isNaN(pin) || pin < 1 || pin > 40) {
-    log('Invalid pin number. Use 1-40.');
-    return;
-  }
-  
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({cmd: 'led', pin, state: 'on'}));
-    log(`LED ON command sent for pin ${pin}`);
-  } else {
-    log('WebSocket not connected');
-  }
-});
-
-offBtn.addEventListener('click', () => {
-  const pin = parseInt(pinInput.value);
-  if (isNaN(pin) || pin < 1 || pin > 40) {
-    log('Invalid pin number. Use 1-40.');
-    return;
-  }
-  
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({cmd: 'led', pin, state: 'off'}));
-    log(`LED OFF command sent for pin ${pin}`);
-  } else {
-    log('WebSocket not connected');
-  }
-});
-
-// Pin input validation
-pinInput.addEventListener('input', () => {
-  const value = parseInt(pinInput.value);
-  if (isNaN(value) || value < 1 || value > 40) {
-    pinInput.style.borderColor = '#dc2626';
-  } else {
-    pinInput.style.borderColor = '';
-  }
-});
-
-// Motor control functions
-function sendMotorCommand(movement, speed = null) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    log('WebSocket not connected - cannot send motor command');
-    return;
-  }
-  
-  try {
-    const speedValue = speed !== null ? speed : parseInt(motorSpeedSlider.value) / 100;
-    const command = {
-      cmd: 'motor',
-      action: 'move',
-      movement: movement,
-      speed: speedValue
-    };
-    
-    ws.send(JSON.stringify(command));
-    log(`Motor command: ${movement} at ${(speedValue * 100).toFixed(0)}%`);
-    
-    // Update button states
-    updateMotorButtonStates(movement);
-    
-  } catch (error) {
-    log(`Error sending motor command: ${error.message}`);
-  }
-}
-
-// Update motor button active states
-function updateMotorButtonStates(activeMovement) {
-  // Clear all active states first
-  const motorButtons = [motorForward, motorBackward, motorLeft, motorRight, motorStop, motorSpinLeft, motorSpinRight];
-  motorButtons.forEach(btn => {
-    if (btn) btn.classList.remove('active');
-  });
-  
-  // Clear any existing timeout
-  if (motorTimeout) {
-    clearTimeout(motorTimeout);
-    motorTimeout = null;
-  }
-  
-  // Set active state for current movement
-  currentMotorState = activeMovement;
-  let activeButton = null;
-  
-  switch (activeMovement) {
-    case 'forward':
-      activeButton = motorForward;
-      break;
-    case 'backward':
-      activeButton = motorBackward;
-      break;
-    case 'left':
-      activeButton = motorLeft;
-      break;
-    case 'right':
-      activeButton = motorRight;
-      break;
-    case 'stop':
-      activeButton = motorStop;
-      break;
-    case 'spin_left':
-      activeButton = motorSpinLeft;
-      break;
-    case 'spin_right':
-      activeButton = motorSpinRight;
-      break;
-  }
-  
-  if (activeButton) {
-    activeButton.classList.add('active');
-    
-    // Auto-clear active state after movement (except for stop)
-    if (activeMovement !== 'stop') {
-      motorTimeout = setTimeout(() => {
-        activeButton.classList.remove('active');
-        currentMotorState = 'stop';
-        motorStop.classList.add('active');
-      }, 2000); // Clear after 2 seconds
-    }
-  }
-}
-
-// Function to prevent button layout shift on mobile
-function preventLayoutShift(event) {
-  // Only blur to prevent keyboard popup on mobile
-  if (event.target && window.innerWidth <= 767) {
-    event.target.blur();
-  }
-}
-
-// Speed slider update
-motorSpeedSlider.addEventListener('input', () => {
-  const value = motorSpeedSlider.value;
-  speedValue.textContent = value + '%';
-});
-
-// Motor control event listeners with layout shift prevention
-motorForward.addEventListener('click', (e) => {
-  preventLayoutShift(e);
-  sendMotorCommand('forward');
-});
-
-motorBackward.addEventListener('click', (e) => {
-  preventLayoutShift(e);
-  sendMotorCommand('backward');
-});
-
-motorLeft.addEventListener('click', (e) => {
-  preventLayoutShift(e);
-  sendMotorCommand('left');
-});
-
-motorRight.addEventListener('click', (e) => {
-  preventLayoutShift(e);
-  sendMotorCommand('right');
-});
-
-motorStop.addEventListener('click', (e) => {
-  preventLayoutShift(e);
-  sendMotorCommand('stop', 0);
-});
-
-motorSpinLeft.addEventListener('click', (e) => {
-  preventLayoutShift(e);
-  sendMotorCommand('spin_left');
-});
-
-motorSpinRight.addEventListener('click', (e) => {
-  preventLayoutShift(e);
-  sendMotorCommand('spin_right');
-});
-
-// Add touch event listeners to prevent layout issues on mobile
-const allMotorButtons = [motorForward, motorBackward, motorLeft, motorRight, motorStop, motorSpinLeft, motorSpinRight];
-allMotorButtons.forEach(button => {
-  if (button) {
-    // Only prevent context menu on long press
-    button.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-    });
-    
-    // Ensure proper touch behavior
-    button.style.touchAction = 'manipulation';
-    button.style.pointerEvents = 'auto';
-    button.style.cursor = 'pointer';
-  }
-});
-
-// Ensure all buttons work properly on mobile
-const allButtons = document.querySelectorAll('button');
-allButtons.forEach(button => {
-  button.style.touchAction = 'manipulation';
-  button.style.pointerEvents = 'auto';
-  button.style.cursor = 'pointer';
-  button.style.webkitUserSelect = 'none';
-  button.style.userSelect = 'none';
+boatSelect.addEventListener('change', (e) => {
+  selectedBoatId = e.target.value;
+  updateUI(false);
+  log(`Selected boat: ${selectedBoatId}`);
 });
 
 // Initialize UI
 updateStatus('idle', 'Idle');
 updateUI(false);
-updateMotorButtonStates('stop'); // Initialize with stop state active
-log('Harbor client initialized');
-log('Click Connect to start streaming');
+log('Harbor relay client initialized');
+log('Loading available boats...');
 
-// Video settings change handlers
-resolutionSelect.addEventListener('change', () => {
-  const resolution = resolutionSelect.value.split('x');
-  currentVideoSettings.width = parseInt(resolution[0]);
-  currentVideoSettings.height = parseInt(resolution[1]);
-  log(`Resolution changed to ${currentVideoSettings.width}x${currentVideoSettings.height}`);
-});
+// Load boats on startup
+loadBoats();
 
-fpsSelect.addEventListener('change', () => {
-  currentVideoSettings.fps = parseInt(fpsSelect.value);
-  log(`Frame rate changed to ${currentVideoSettings.fps} FPS`);
-});
-
-// Function to get current video settings
-function getVideoSettings() {
-  return {
-    width: currentVideoSettings.width,
-    height: currentVideoSettings.height,
-    fps: currentVideoSettings.fps
-  };
-}
+// Refresh boats every 30 seconds
+setInterval(loadBoats, 30000);
 
 // Cleanup on page unload
 window.addEventListener('beforeunload', cleanup);

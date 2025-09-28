@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Harbor - WebRTC Live Camera Streaming for Raspberry Pi.
+"""Harbor - WebRTC Relay Server for Boat Camera Streaming.
 
-High-performance WebRTC video streaming server with WebSocket command 
-interface, optimized for Raspberry Pi camera with GPIO LED control.
+A WebRTC relay server that connects boat clients (running on Pi Zero)
+to browser clients, enabling remote camera streaming and control.
 """
 
 import asyncio
@@ -13,17 +13,14 @@ import logging
 from aiohttp import web
 
 from .client import index_handler
-from .led import LedController
-from .motor import create_motor_controller
-from .webrtc import offer_handler
-from .websocket import websocket_handler
+from .relay import webrtc_offer_handler, list_boats_handler
+from .server import boat_websocket_handler, browser_websocket_handler
 
 
 async def on_shutdown(app: web.Application):
     """Clean shutdown handler for the application.
     
-    Closes all WebSocket connections, stops camera streams, 
-    stops motors, and closes RTCPeerConnections gracefully.
+    Closes all WebSocket connections and RTCPeerConnections gracefully.
     
     Args:
         app: aiohttp application instance
@@ -32,15 +29,6 @@ async def on_shutdown(app: web.Application):
     for ws in list(app["sockets"]):
         await ws.close()
     
-    # Stop all camera tracks
-    if "camera_tracks" in app:
-        for camera_track in list(app["camera_tracks"]):
-            camera_track.stop_camera()
-    
-    # Stop all motors and cleanup
-    if "motor" in app:
-        app["motor"].cleanup()
-    
     # Close peer connections
     await asyncio.gather(
         *(pc.close() for pc in list(app["pcs"])), 
@@ -48,47 +36,26 @@ async def on_shutdown(app: web.Application):
     )
 
 
-def create_app(width=160, height=120, fps=30, enable_motors=True):
-    """Create and configure the Harbor application for live camera streaming.
+def create_app():
+    """Create and configure the Harbor relay server application.
     
-    Args:
-        width: Video width in pixels (default: 160)
-        height: Video height in pixels (default: 120)
-        fps: Frames per second for camera stream (default: 30)
-        enable_motors: Enable motor controller (default: True)
-        
     Returns:
         web.Application: Configured aiohttp application
     """
     app = web.Application()
     
     # Initialize application state
-    app["fps"] = fps
-    app["width"] = width
-    app["height"] = height
-    app["led"] = LedController()
     app["pcs"] = set()  # RTCPeerConnection instances
     app["sockets"] = set()  # WebSocket connections
-    app["camera_tracks"] = set()  # Active camera tracks
     
-    # Initialize motor controller
-    if enable_motors:
-        try:
-            app["motor"] = create_motor_controller("l298n_default")
-            logging.info("Motor controller initialized")
-        except Exception as e:
-            logging.warning("Motor controller initialization failed: %s", e)
-            app["motor"] = None
-    else:
-        app["motor"] = None
-    
-    logging.info("Harbor application created for live camera streaming (%dx%d @ %d fps)", 
-                width, height, fps)
+    logging.info("Harbor relay server application created")
     
     # Configure routes
-    app.router.add_get("/", index_handler)
-    app.router.add_post("/offer", offer_handler)
-    app.router.add_get("/ws", websocket_handler)
+    app.router.add_get("/", index_handler)  # Web interface
+    app.router.add_post("/offer", webrtc_offer_handler)  # WebRTC offers from browsers
+    app.router.add_get("/boats", list_boats_handler)  # List available boats
+    app.router.add_get("/ws", browser_websocket_handler)  # Browser WebSocket
+    app.router.add_get("/boat", boat_websocket_handler)  # Boat WebSocket
     
     # Add shutdown handler
     app.on_shutdown.append(on_shutdown)
@@ -99,9 +66,9 @@ def create_app(width=160, height=120, fps=30, enable_motors=True):
 # Expose main components for external use
 __all__ = [
     "create_app",
-    "LedController",
-    "create_motor_controller",
     "index_handler",
-    "offer_handler", 
-    "websocket_handler"
+    "webrtc_offer_handler",
+    "list_boats_handler",
+    "boat_websocket_handler",
+    "browser_websocket_handler"
 ]

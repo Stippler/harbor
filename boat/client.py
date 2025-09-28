@@ -255,8 +255,14 @@ class BoatClient:
         Args:
             data: Dictionary to send as JSON
         """
-        if self.ws and not self.ws.closed:
+        if self.ws and hasattr(self.ws, 'closed') and not self.ws.closed:
             await self.ws.send(json.dumps(data))
+        elif self.ws:
+            # For websockets that don't have .closed attribute, try sending anyway
+            try:
+                await self.ws.send(json.dumps(data))
+            except Exception as e:
+                logging.warning("Failed to send message: %s", e)
 
 
 async def create_boat_client(server_url, width=160, height=120, fps=30, boat_id=None):

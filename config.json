@@ -1,0 +1,35 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 7890,
+    "public_domain": "deepharbor.xyz",
+    "public_port": 7890,
+    "fallback_ip": "2.56.96.36",
+    "ssl": {
+      "enabled": false,
+      "cert_file": "/etc/ssl/harbor/cert.pem",
+      "key_file": "/etc/ssl/harbor/key.pem"
+    }
+  },
+  "boat": {
+    "server_url": "ws://deepharbor.xyz:7890",
+    "fallback_server_url": "ws://2.56.96.36:7890",
+    "boat_id": "boat-1",
+    "camera": {
+      "width": 160,
+      "height": 120,
+      "fps": 30
+    },
+    "gpio": {
+      "enable_motors": true,
+      "enable_leds": true
+    }
+  },
+  "webrtc": {
+    "ice_servers": [
+      {
+        "urls": "stun:stun.l.google.com:19302"
+      }
+    ]
+  }
+}

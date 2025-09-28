@@ -1,13 +1,23 @@
-# Core dependencies for Harbor WebRTC streaming
+# Harbor WebRTC Streaming Requirements
+
+# Core web framework
 aiohttp>=3.8.0
-aiortc>=1.6.0
+
+# WebRTC implementation
+aiortc>=1.5.0
+
+# WebSocket support
+websockets>=11.0
+
+# Audio/Video processing (required by aiortc)
 av>=10.0.0
-numpy>=1.24.0
 
-# Optional dependencies for Raspberry Pi (uncomment when needed)
-# picamera2
-# gpiozero
+# Numerical computing (used by camera processing)
+numpy>=1.21.0
 
-# Development dependencies (optional)
-# pytest>=7.0.0
-# pytest-asyncio>=0.21.0
+# Optional: For better performance and additional codecs
+# opencv-python>=4.5.0  # Uncomment if you need OpenCV features
+
+# Development/debugging tools (optional)
+# uvloop>=0.17.0  # Faster event loop for Linux
+# cProfile  # Built-in Python profiler

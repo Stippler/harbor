@@ -36,8 +36,11 @@ async def on_shutdown(app: web.Application):
     )
 
 
-def create_app():
+def create_app(config=None):
     """Create and configure the Harbor relay server application.
+    
+    Args:
+        config: Configuration object (optional)
     
     Returns:
         web.Application: Configured aiohttp application
@@ -47,6 +50,7 @@ def create_app():
     # Initialize application state
     app["pcs"] = set()  # RTCPeerConnection instances
     app["sockets"] = set()  # WebSocket connections
+    app["config"] = config  # Store config for handlers
     
     logging.info("Harbor relay server application created")
     

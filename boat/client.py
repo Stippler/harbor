@@ -38,7 +38,7 @@ class BoatClient:
         
         logging.info("Boat client initialized: %s -> %s", self.boat_id, server_url)
     
-    async def start(self):
+    async def start(self, fallback_url=None):
         """Start the boat client and connect to server."""
         if self.running:
             logging.warning("Boat client already running")
@@ -47,14 +47,35 @@ class BoatClient:
         self.running = True
         logging.info("Starting boat client connection to %s", self.server_url)
         
+        # Try primary server URL first, then fallback
+        urls_to_try = [self.server_url]
+        if fallback_url:
+            urls_to_try.append(fallback_url)
+        
+        connected = False
+        for url in urls_to_try:
+            try:
+                logging.info("Attempting connection to %s", url)
+                
+                # Parse server URL
+                parsed = urlparse(url)
+                ws_url = f"ws://{parsed.netloc}/boat"
+                
+                # Connect to server WebSocket
+                self.ws = await websockets.connect(ws_url, timeout=10)
+                logging.info("Connected to Harbor server WebSocket at %s", url)
+                self.server_url = url  # Update to working URL
+                connected = True
+                break
+                
+            except Exception as e:
+                logging.warning("Failed to connect to %s: %s", url, e)
+                continue
+        
+        if not connected:
+            raise ConnectionError("Failed to connect to any server URLs")
+        
         try:
-            # Parse server URL
-            parsed = urlparse(self.server_url)
-            ws_url = f"ws://{parsed.netloc}/boat"
-            
-            # Connect to server WebSocket
-            self.ws = await websockets.connect(ws_url)
-            logging.info("Connected to Harbor server WebSocket")
             
             # Initialize WebRTC peer connection
             self.pc = RTCPeerConnection()

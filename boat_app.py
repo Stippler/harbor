@@ -4,7 +4,10 @@
 import argparse
 import asyncio
 import logging
+import sys
+import os
 
+from boat.config import Config
 from boat import create_boat_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -12,24 +15,55 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 
 async def main():
     parser = argparse.ArgumentParser(description="Boat WebRTC camera client for Raspberry Pi")
-    parser.add_argument("--server", required=True, help="Harbor server URL (e.g., ws://harbor-server:8080)")
-    parser.add_argument("--width", type=int, default=160, help="Camera width (default: 160)")
-    parser.add_argument("--height", type=int, default=120, help="Camera height (default: 120)")
-    parser.add_argument("--fps", type=int, default=30, help="Camera FPS (default: 30)")
-    parser.add_argument("--boat-id", help="Unique boat identifier (auto-generated if not provided)")
+    parser.add_argument("--config", default="config.json", help="Configuration file path")
+    parser.add_argument("--server", help="Harbor server URL (overrides config)")
+    parser.add_argument("--width", type=int, help="Camera width (overrides config)")
+    parser.add_argument("--height", type=int, help="Camera height (overrides config)")
+    parser.add_argument("--fps", type=int, help="Camera FPS (overrides config)")
+    parser.add_argument("--boat-id", help="Unique boat identifier (overrides config)")
     args = parser.parse_args()
 
-    logging.info("Starting Boat client connecting to %s", args.server)
+    # Load configuration
+    config = Config(args.config)
+    
+    # Override config with command line arguments
+    if args.server:
+        config.set("boat.server_url", args.server)
+    if args.width:
+        config.set("boat.camera.width", args.width)
+    if args.height:
+        config.set("boat.camera.height", args.height)
+    if args.fps:
+        config.set("boat.camera.fps", args.fps)
+    if args.boat_id:
+        config.set("boat.boat_id", args.boat_id)
+
+    # Get settings from config
+    server_url = config.get("boat.server_url")
+    fallback_url = config.get("boat.fallback_server_url")
+    width = config.get("boat.camera.width", 160)
+    height = config.get("boat.camera.height", 120)
+    fps = config.get("boat.camera.fps", 30)
+    boat_id = config.get("boat.boat_id")
+
+    if not server_url:
+        logging.error("Server URL not specified in config or command line")
+        logging.error("Use --server or set boat.server_url in config.json")
+        return 1
+
+    logging.info("Starting Boat client connecting to %s", server_url)
+    if fallback_url:
+        logging.info("Fallback URL: %s", fallback_url)
+    logging.info("Boat ID: %s", boat_id or "auto-generated")
+    logging.info("Camera: %dx%d @ %d fps", width, height, fps)
     
     try:
-        # Create and start boat client
-        client = await create_boat_client(
-            server_url=args.server,
-            width=args.width,
-            height=args.height,
-            fps=args.fps,
-            boat_id=args.boat_id
-        )
+        # Create boat client
+        from boat.client import BoatClient
+        client = BoatClient(server_url, width, height, fps, boat_id)
+        
+        # Start with fallback support
+        await client.start(fallback_url)
         
         # Run until interrupted
         try:

@@ -1,0 +1,23 @@
+# Boat Client Requirements (Raspberry Pi)
+
+# Core web framework
+aiohttp>=3.8.0
+
+# WebRTC implementation
+aiortc>=1.5.0
+
+# WebSocket support
+websockets>=11.0
+
+# Audio/Video processing
+av>=10.0.0
+
+# Numerical computing
+numpy>=1.21.0
+
+# Raspberry Pi specific
+picamera2>=0.3.0  # Raspberry Pi camera interface
+gpiozero>=1.6.0   # GPIO control
+
+# Optional: Better performance on Pi
+# uvloop>=0.17.0  # Faster event loop

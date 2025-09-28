@@ -6,7 +6,7 @@ import json
 import logging
 from urllib.parse import urlparse
 import websockets
-from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from aiortc.contrib.signaling import BYE
 
 from .video import CameraStreamTrack
@@ -84,23 +84,57 @@ class BoatClient:
         
         try:
             
-            # Initialize WebRTC peer connection
-            self.pc = RTCPeerConnection()
+            # Initialize WebRTC peer connection without STUN servers (local network only)
+            # This works if both devices are on the same network or have direct connectivity
+            ice_config = RTCConfiguration(
+                iceServers=[],  # No STUN servers - direct connection only
+            )
+            logging.info("🚤 BOAT ICE: Initializing peer connection WITHOUT STUN servers (direct connection mode)")
+            self.pc = RTCPeerConnection(configuration=ice_config)
             
             # Setup camera track
             self.camera_track = CameraStreamTrack(self.fps, (self.width, self.height))
             self.camera_track.start_camera()
             self.pc.addTrack(self.camera_track)
-            logging.info("Camera track added to peer connection")
+            logging.info("🚤 BOAT CAMERA: Camera track added to peer connection")
+            logging.info("🚤 BOAT CAMERA: Track kind: %s", self.camera_track.kind)
+            logging.info("🚤 BOAT CAMERA: Track ready state: %s", self.camera_track.readyState)
             
             # Setup peer connection event handlers
             @self.pc.on("iceconnectionstatechange")
             def on_ice_state_change():
-                logging.info("ICE connection state: %s", self.pc.iceConnectionState)
+                logging.info("🚤 BOAT ICE: ICE connection state changed: %s", self.pc.iceConnectionState)
+                if self.pc.iceConnectionState == "failed":
+                    logging.error("🚤 BOAT ICE: ICE connection failed - check STUN servers and firewall")
+                elif self.pc.iceConnectionState == "disconnected":
+                    logging.warning("🚤 BOAT ICE: ICE connection disconnected")
+                elif self.pc.iceConnectionState == "connected":
+                    logging.info("🚤 BOAT ICE: ICE connection established successfully!")
             
             @self.pc.on("connectionstatechange")
             def on_connection_state_change():
-                logging.info("Connection state: %s", self.pc.connectionState)
+                logging.info("🚤 BOAT CONNECTION: Connection state changed: %s", self.pc.connectionState)
+                if self.pc.connectionState == "connected":
+                    logging.info("🚤 BOAT CONNECTION: WebRTC connection fully established!")
+                elif self.pc.connectionState == "failed":
+                    logging.error("🚤 BOAT CONNECTION: WebRTC connection failed")
+                elif self.pc.connectionState == "disconnected":
+                    logging.warning("🚤 BOAT CONNECTION: WebRTC connection disconnected")
+            
+            @self.pc.on("icegatheringstatechange")
+            def on_ice_gathering_state_change():
+                logging.info("🚤 BOAT ICE: ICE gathering state: %s", self.pc.iceGatheringState)
+            
+            @self.pc.on("icecandidate")
+            def on_ice_candidate(candidate):
+                if candidate:
+                    logging.info("🚤 BOAT ICE: Generated ICE candidate: %s", candidate.candidate)
+                else:
+                    logging.info("🚤 BOAT ICE: ICE candidate gathering complete")
+            
+            @self.pc.on("signalingstatechange")
+            def on_signaling_state_change():
+                logging.info("🚤 BOAT SIGNALING: Signaling state: %s", self.pc.signalingState)
             
             # Send boat registration
             await self._send_message({
@@ -115,17 +149,26 @@ class BoatClient:
             })
             
             # Create initial offer for automatic streaming
-            logging.info("Creating initial WebRTC offer for streaming")
+            logging.info("🚤 BOAT OFFER: Creating initial WebRTC offer for streaming")
             offer = await self.pc.createOffer()
             await self.pc.setLocalDescription(offer)
+            logging.info("🚤 BOAT OFFER: Created offer - SDP length: %d", len(offer.sdp))
+            logging.info("🚤 BOAT OFFER: Offer type: %s", offer.type)
+            logging.info("🚤 BOAT OFFER: ICE gathering state after offer: %s", self.pc.iceGatheringState)
+            logging.info("🚤 BOAT OFFER: Signaling state after offer: %s", self.pc.signalingState)
             
             # Send offer to server
-            await self._send_message({
+            offer_message = {
                 "type": "webrtc_offer",
                 "boat_id": self.boat_id,
                 "sdp": offer.sdp,
                 "offer_type": offer.type
-            })
+            }
+            await self._send_message(offer_message)
+            logging.info("🚤 BOAT OFFER: Sent WebRTC offer to server")
+            
+            # Test network connectivity
+            await self._test_network_connectivity()
             
             # Start message handling loop
             await self._message_loop()
@@ -247,13 +290,23 @@ class BoatClient:
             data: Message data containing SDP answer
         """
         try:
+            logging.info("🚤 BOAT ANSWER: Received WebRTC answer from server")
+            logging.info("🚤 BOAT ANSWER: SDP length: %d", len(data.get("sdp", "")))
+            logging.info("🚤 BOAT ANSWER: Answer type: %s", data.get("answer_type", "answer"))
+            
             answer = RTCSessionDescription(
                 sdp=data["sdp"],
                 type=data["answer_type"]
             )
             
             await self.pc.setRemoteDescription(answer)
-            logging.info("Set remote description from server answer")
+            logging.info("🚤 BOAT ANSWER: Successfully set remote description from server answer")
+            logging.info("🚤 BOAT ANSWER: ICE connection state after answer: %s", self.pc.iceConnectionState)
+            logging.info("🚤 BOAT ANSWER: Connection state after answer: %s", self.pc.connectionState)
+            logging.info("🚤 BOAT ANSWER: Signaling state after answer: %s", self.pc.signalingState)
+            
+            # Set up ICE connection timeout
+            asyncio.create_task(self._monitor_ice_connection())
             
         except Exception as e:
             logging.error("Failed to handle WebRTC answer: %s", e)
@@ -429,6 +482,42 @@ class BoatClient:
                 "error": str(e)
             })
     
+    async def _test_network_connectivity(self):
+        """Test network connectivity to STUN servers."""
+        import socket
+        import asyncio
+        
+        # Test local network connectivity instead of Google STUN servers
+        logging.info("🌐 BOAT NETWORK: Testing local network connectivity...")
+        
+        # Test connection to Harbor server
+        try:
+            import socket
+            server_host = self.server_url.split("://")[1].split(":")[0]
+            server_port = int(self.server_url.split(":")[-1])
+            
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)
+            result = sock.connect_ex((server_host, server_port))
+            sock.close()
+            
+            if result == 0:
+                logging.info("🌐 BOAT NETWORK: ✅ Can reach Harbor server %s:%d", server_host, server_port)
+            else:
+                logging.warning("🌐 BOAT NETWORK: ❌ Cannot reach Harbor server %s:%d", server_host, server_port)
+                
+        except Exception as e:
+            logging.error("🌐 BOAT NETWORK: ❌ Error testing Harbor server: %s", e)
+        
+        # Test DNS resolution
+        try:
+            import socket
+            server_host = self.server_url.split("://")[1].split(":")[0]
+            ip = socket.gethostbyname(server_host)
+            logging.info("🌐 BOAT NETWORK: ✅ DNS resolution: %s -> %s", server_host, ip)
+        except Exception as e:
+            logging.error("🌐 BOAT NETWORK: ❌ DNS resolution failed: %s", e)
+    
     async def _restart_camera(self):
         """Restart the camera."""
         try:
@@ -456,6 +545,16 @@ class BoatClient:
                 "success": False,
                 "error": str(e)
             })
+    
+    async def _monitor_ice_connection(self):
+        """Monitor ICE connection and log timeout if stuck."""
+        await asyncio.sleep(30)  # Wait 30 seconds
+        
+        if self.pc and self.pc.iceConnectionState == "checking":
+            logging.error("🚤 BOAT ICE: ICE connection stuck in 'checking' state for 30+ seconds")
+            logging.error("🚤 BOAT ICE: This usually indicates firewall/NAT issues or STUN server problems")
+            logging.error("🚤 BOAT ICE: Current ICE gathering state: %s", self.pc.iceGatheringState)
+            logging.error("🚤 BOAT ICE: Current connection state: %s", self.pc.connectionState)
     
     async def _send_message(self, data):
         """Send message to server.

@@ -114,6 +114,19 @@ class BoatClient:
                 }
             })
             
+            # Create initial offer for automatic streaming
+            logging.info("Creating initial WebRTC offer for streaming")
+            offer = await self.pc.createOffer()
+            await self.pc.setLocalDescription(offer)
+            
+            # Send offer to server
+            await self._send_message({
+                "type": "webrtc_offer",
+                "boat_id": self.boat_id,
+                "sdp": offer.sdp,
+                "offer_type": offer.type
+            })
+            
             # Start message handling loop
             await self._message_loop()
             
@@ -177,14 +190,20 @@ class BoatClient:
         """
         msg_type = data.get("type")
         
-        if msg_type == "webrtc_offer":
+        if msg_type == "webrtc_offer" or msg_type == "offer":
             await self._handle_webrtc_offer(data)
-        elif msg_type == "webrtc_answer":
+        elif msg_type == "webrtc_answer" or msg_type == "answer":
             await self._handle_webrtc_answer(data)
         elif msg_type == "ice_candidate":
             await self._handle_ice_candidate(data)
         elif msg_type == "boat_registered":
             logging.info("Successfully registered with server as %s", self.boat_id)
+        elif msg_type == "led_control":
+            await self._handle_led_control(data)
+        elif msg_type == "motor_control":
+            await self._handle_motor_control(data)
+        elif msg_type == "boat_command":
+            await self._handle_boat_command(data)
         elif msg_type == "error":
             logging.error("Server error: %s", data.get("message"))
         else:
@@ -248,6 +267,195 @@ class BoatClient:
         # ICE candidate handling would go here
         # For now, we're using a simple setup without explicit ICE handling
         pass
+    
+    async def _handle_led_control(self, data):
+        """Handle LED control command from server.
+        
+        Args:
+            data: Message data containing LED control info
+        """
+        try:
+            action = data.get("action")  # "on", "off", "blink"
+            led_id = data.get("led_id", "status")  # default to status LED
+            
+            logging.info("LED control: %s LED %s", action, led_id)
+            
+            # Import GPIO control here to avoid issues on non-Pi systems
+            try:
+                from boat.gpio_controller import get_led_controller
+                led_controller = get_led_controller()
+                
+                if action == "on":
+                    led_controller.turn_on(led_id)
+                elif action == "off":
+                    led_controller.turn_off(led_id)
+                elif action == "blink":
+                    duration = data.get("duration", 1.0)
+                    led_controller.blink(led_id, duration)
+                
+                # Send confirmation back to server
+                await self._send_message({
+                    "type": "command_response",
+                    "boat_id": self.boat_id,
+                    "command_type": "led_control",
+                    "success": True,
+                    "action": action,
+                    "led_id": led_id
+                })
+                
+            except ImportError:
+                logging.warning("GPIO not available - LED control disabled")
+                await self._send_message({
+                    "type": "command_response",
+                    "boat_id": self.boat_id,
+                    "command_type": "led_control",
+                    "success": False,
+                    "error": "GPIO not available"
+                })
+                
+        except Exception as e:
+            logging.error("Failed to handle LED control: %s", e)
+            await self._send_message({
+                "type": "command_response",
+                "boat_id": self.boat_id,
+                "command_type": "led_control",
+                "success": False,
+                "error": str(e)
+            })
+    
+    async def _handle_motor_control(self, data):
+        """Handle motor control command from server.
+        
+        Args:
+            data: Message data containing motor control info
+        """
+        try:
+            action = data.get("action")  # "forward", "backward", "left", "right", "stop"
+            speed = data.get("speed", 0.5)  # 0.0 to 1.0
+            duration = data.get("duration", 0)  # 0 = continuous
+            
+            logging.info("Motor control: %s at speed %.2f for %s seconds", 
+                        action, speed, duration if duration > 0 else "continuous")
+            
+            # Import GPIO control here to avoid issues on non-Pi systems
+            try:
+                from boat.gpio_controller import get_motor_controller
+                motor_controller = get_motor_controller()
+                
+                if action == "forward":
+                    motor_controller.move_forward(speed, duration)
+                elif action == "backward":
+                    motor_controller.move_backward(speed, duration)
+                elif action == "left":
+                    motor_controller.turn_left(speed, duration)
+                elif action == "right":
+                    motor_controller.turn_right(speed, duration)
+                elif action == "stop":
+                    motor_controller.stop()
+                
+                # Send confirmation back to server
+                await self._send_message({
+                    "type": "command_response",
+                    "boat_id": self.boat_id,
+                    "command_type": "motor_control",
+                    "success": True,
+                    "action": action,
+                    "speed": speed,
+                    "duration": duration
+                })
+                
+            except ImportError:
+                logging.warning("GPIO not available - Motor control disabled")
+                await self._send_message({
+                    "type": "command_response",
+                    "boat_id": self.boat_id,
+                    "command_type": "motor_control",
+                    "success": False,
+                    "error": "GPIO not available"
+                })
+                
+        except Exception as e:
+            logging.error("Failed to handle motor control: %s", e)
+            await self._send_message({
+                "type": "command_response",
+                "boat_id": self.boat_id,
+                "command_type": "motor_control",
+                "success": False,
+                "error": str(e)
+            })
+    
+    async def _handle_boat_command(self, data):
+        """Handle general boat command from server.
+        
+        Args:
+            data: Message data containing boat command
+        """
+        try:
+            command = data.get("command")
+            params = data.get("params", {})
+            
+            logging.info("Boat command: %s with params %s", command, params)
+            
+            # Handle different boat commands
+            if command == "status":
+                # Send boat status back to server
+                await self._send_message({
+                    "type": "boat_status",
+                    "boat_id": self.boat_id,
+                    "camera_active": self.camera is not None,
+                    "webrtc_connected": self.pc.connectionState == "connected" if self.pc else False,
+                    "websocket_connected": self.ws and not self.ws.closed if hasattr(self.ws, 'closed') else bool(self.ws)
+                })
+            elif command == "restart_camera":
+                # Restart camera
+                await self._restart_camera()
+            else:
+                logging.warning("Unknown boat command: %s", command)
+                await self._send_message({
+                    "type": "command_response",
+                    "boat_id": self.boat_id,
+                    "command_type": "boat_command",
+                    "success": False,
+                    "error": f"Unknown command: {command}"
+                })
+                
+        except Exception as e:
+            logging.error("Failed to handle boat command: %s", e)
+            await self._send_message({
+                "type": "command_response",
+                "boat_id": self.boat_id,
+                "command_type": "boat_command",
+                "success": False,
+                "error": str(e)
+            })
+    
+    async def _restart_camera(self):
+        """Restart the camera."""
+        try:
+            if self.camera:
+                logging.info("Stopping camera for restart")
+                self.camera.stop()
+                await asyncio.sleep(1)
+                
+                logging.info("Starting camera after restart")
+                self.camera.start()
+                
+                await self._send_message({
+                    "type": "command_response",
+                    "boat_id": self.boat_id,
+                    "command_type": "restart_camera",
+                    "success": True
+                })
+                
+        except Exception as e:
+            logging.error("Failed to restart camera: %s", e)
+            await self._send_message({
+                "type": "command_response",
+                "boat_id": self.boat_id,
+                "command_type": "restart_camera",
+                "success": False,
+                "error": str(e)
+            })
     
     async def _send_message(self, data):
         """Send message to server.

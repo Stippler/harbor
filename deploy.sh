@@ -71,5 +71,11 @@ echo -e "Web: http://$DOMAIN:7890"
 echo -e "Boat: ws://$DOMAIN:7890"
 echo -e "Fallback: ws://$VPS_HOST:7890"
 
+echo -e "\n${YELLOW}🔄 Restarting Harbor service...${NC}"
+# Use the provided sudo password to restart Harbor
+ssh -p $VPS_PORT $VPS_USER@$VPS_HOST "echo 'zl.TXr62uh^9' | sudo -S systemctl restart harbor"
+
+echo -e "${GREEN}✅ Harbor restarted${NC}"
+
 echo -e "\n${YELLOW}Check logs:${NC}"
 echo -e "sudo journalctl -u harbor -f"

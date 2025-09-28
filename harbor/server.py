@@ -78,15 +78,57 @@ class HarborServer:
             for boat_id, boat in self.boats.items()
         ]
     
-    async def create_stream(self, boat_id: str, browser_client: 'BrowserClient'):
-        """Create a WebRTC stream from boat to browser client.
+    async def relay_boat_offer_to_browser(self, boat_id: str, browser_client: 'BrowserClient'):
+        """Relay boat's WebRTC offer to browser client.
         
         Args:
             boat_id: ID of the boat to stream from
             browser_client: Browser client to stream to
             
         Returns:
-            bool: True if stream was created successfully
+            bool: True if offer was relayed successfully
+        """
+        if boat_id not in self.boats:
+            logging.error("Boat %s not found", boat_id)
+            return False
+        
+        boat = self.boats[boat_id]
+        if not boat.is_connected():
+            logging.error("Boat %s not connected", boat_id)
+            return False
+        
+        if not boat.current_offer:
+            logging.error("No WebRTC offer available from boat %s", boat_id)
+            return False
+        
+        try:
+            # Store the connection for answer relay
+            browser_client.current_boat_id = boat_id
+            
+            # Send the boat's offer to the browser
+            await browser_client.send_message({
+                "type": "webrtc_offer",
+                "boat_id": boat_id,
+                "sdp": boat.current_offer["sdp"],
+                "offer_type": boat.current_offer["type"]
+            })
+            
+            logging.info("Relayed WebRTC offer from boat %s to browser", boat_id)
+            return True
+            
+        except Exception as e:
+            logging.error("Failed to relay offer from %s: %s", boat_id, e)
+            return False
+    
+    async def relay_browser_answer_to_boat(self, boat_id: str, answer_data: dict):
+        """Relay browser's WebRTC answer to boat.
+        
+        Args:
+            boat_id: ID of the boat
+            answer_data: WebRTC answer data from browser
+            
+        Returns:
+            bool: True if answer was relayed successfully
         """
         if boat_id not in self.boats:
             logging.error("Boat %s not found", boat_id)
@@ -98,26 +140,49 @@ class HarborServer:
             return False
         
         try:
-            # Create peer connection between boat and browser
-            pc = RTCPeerConnection()
+            # Send the browser's answer to the boat
+            await boat.send_message({
+                "type": "webrtc_answer",
+                "sdp": answer_data.get("sdp"),
+                "answer_type": answer_data.get("type", "answer")
+            })
             
-            # Setup track relay from boat to browser
-            @pc.on("track")
-            def on_track(track):
-                logging.info("Received track from boat %s", boat_id)
-                browser_client.pc.addTrack(track)
-            
-            # Request offer from boat
-            await boat.request_webrtc_offer()
-            
-            # Store the peer connection
-            stream_id = f"{boat_id}_{id(browser_client)}"
-            self.active_streams[stream_id] = pc
-            
+            logging.info("Relayed WebRTC answer from browser to boat %s", boat_id)
             return True
             
         except Exception as e:
-            logging.error("Failed to create stream from %s: %s", boat_id, e)
+            logging.error("Failed to relay answer to %s: %s", boat_id, e)
+            return False
+    
+    async def relay_control_command(self, boat_id: str, command: dict):
+        """Relay control command from browser to boat.
+        
+        Args:
+            boat_id: ID of the boat
+            command: Control command data
+            
+        Returns:
+            bool: True if command was relayed successfully
+        """
+        if boat_id not in self.boats:
+            logging.error("Boat %s not found", boat_id)
+            return False
+        
+        boat = self.boats[boat_id]
+        if not boat.is_connected():
+            logging.error("Boat %s not connected", boat_id)
+            return False
+        
+        try:
+            # Add boat_id to command and relay to boat
+            command["boat_id"] = boat_id
+            await boat.send_message(command)
+            
+            logging.info("Relayed control command to boat %s: %s", boat_id, command.get("type"))
+            return True
+            
+        except Exception as e:
+            logging.error("Failed to relay command to %s: %s", boat_id, e)
             return False
 
 
@@ -136,6 +201,7 @@ class BoatConnection:
         self.websocket = websocket
         self.capabilities = capabilities
         self.pc = None
+        self.current_offer = None  # Store the boat's WebRTC offer
     
     def is_connected(self):
         """Check if boat is still connected.
@@ -152,13 +218,8 @@ class BoatConnection:
             data: Message data to send
         """
         if self.is_connected():
-            await self.websocket.send(json.dumps(data))
+            await self.websocket.send_str(json.dumps(data))
     
-    async def request_webrtc_offer(self):
-        """Request WebRTC offer from boat."""
-        await self.send_message({
-            "type": "webrtc_offer_request"
-        })
 
 
 class BrowserClient:
@@ -222,10 +283,21 @@ async def boat_websocket_handler(request: web.Request):
                         capabilities = data.get("capabilities", {})
                         harbor_server.register_boat(boat_id, ws, capabilities)
                         
-                        await ws.send(json.dumps({
+                        await ws.send_str(json.dumps({
                             "type": "boat_registered",
                             "boat_id": boat_id
                         }))
+                    
+                    elif msg_type == "webrtc_offer":
+                        # Handle WebRTC offer from boat - store for browser clients
+                        boat_id = data.get("boat_id")
+                        if boat_id in harbor_server.boats:
+                            boat = harbor_server.boats[boat_id]
+                            boat.current_offer = {
+                                "sdp": data.get("sdp"),
+                                "type": data.get("offer_type", "offer")
+                            }
+                            logging.info("Stored WebRTC offer from boat %s", boat_id)
                     
                     elif msg_type == "webrtc_answer":
                         # Handle WebRTC answer from boat
@@ -282,10 +354,29 @@ async def browser_websocket_handler(request: web.Request):
                     if msg_type == "request_stream":
                         boat_id = data.get("boat_id")
                         if boat_id:
-                            success = await harbor_server.create_stream(boat_id, client)
+                            success = await harbor_server.relay_boat_offer_to_browser(boat_id, client)
                             await client.send_message({
                                 "type": "stream_response",
                                 "boat_id": boat_id,
+                                "success": success
+                            })
+                    
+                    elif msg_type == "webrtc_answer":
+                        # Relay WebRTC answer from browser to boat
+                        boat_id = data.get("boat_id") or client.current_boat_id
+                        if boat_id:
+                            success = await harbor_server.relay_browser_answer_to_boat(boat_id, data)
+                            logging.info("WebRTC answer relayed to boat %s: %s", boat_id, success)
+                    
+                    elif msg_type in ["led_control", "motor_control", "boat_command"]:
+                        # Relay control commands to boat
+                        boat_id = data.get("boat_id") or client.current_boat_id
+                        if boat_id:
+                            success = await harbor_server.relay_control_command(boat_id, data)
+                            await client.send_message({
+                                "type": "command_response",
+                                "boat_id": boat_id,
+                                "command_type": msg_type,
                                 "success": success
                             })
                     

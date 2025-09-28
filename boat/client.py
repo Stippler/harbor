@@ -61,12 +61,19 @@ class BoatClient:
                 parsed = urlparse(url)
                 ws_url = f"ws://{parsed.netloc}/boat"
                 
-                # Connect to server WebSocket
-                self.ws = await websockets.connect(ws_url, timeout=10)
-                logging.info("Connected to Harbor server WebSocket at %s", url)
-                self.server_url = url  # Update to working URL
-                connected = True
-                break
+                # Connect to server WebSocket with manual timeout
+                try:
+                    self.ws = await asyncio.wait_for(
+                        websockets.connect(ws_url), 
+                        timeout=10.0
+                    )
+                    logging.info("Connected to Harbor server WebSocket at %s", url)
+                    self.server_url = url  # Update to working URL
+                    connected = True
+                    break
+                except asyncio.TimeoutError:
+                    logging.warning("Connection to %s timed out", url)
+                    continue
                 
             except Exception as e:
                 logging.warning("Failed to connect to %s: %s", url, e)

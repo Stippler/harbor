@@ -4,7 +4,7 @@
 from aiohttp import web
 
 
-# HTML client interface
+# HTML client interface with WebSocket-based WebRTC signaling
 CLIENT_HTML = """<!doctype html>
 <html lang="en">
 <head>
@@ -48,63 +48,73 @@ html, body {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  line-height: 1.6;
-  color: var(--text);
-  background: var(--background);
   margin: 0;
-  padding: 16px;
-  min-height: 100vh;
+  padding: 0;
+  background: var(--background);
+  color: var(--text);
+  line-height: 1.6;
 }
 
 .container {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
+  padding: 20px;
 }
 
 .header {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 30px;
+  padding: 20px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
 }
 
 .header h1 {
-  font-size: 2rem;
+  margin: 0 0 10px 0;
+  font-size: 2.5rem;
   font-weight: 700;
-  margin: 0 0 8px 0;
-  color: var(--text);
+  color: var(--primary);
 }
 
 .header p {
-  color: var(--text-secondary);
   margin: 0;
+  color: var(--text-secondary);
   font-size: 1.1rem;
 }
 
 .main-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 24px;
+  grid-template-columns: 1fr 350px;
+  gap: 30px;
+  align-items: start;
 }
 
-@media (min-width: 768px) {
+@media (max-width: 1024px) {
   .main-grid {
-    grid-template-columns: 1fr 400px;
+    grid-template-columns: 1fr;
+    gap: 20px;
   }
 }
 
 .video-section {
   background: var(--surface);
   border-radius: var(--radius-lg);
+  padding: 20px;
   box-shadow: var(--shadow);
-  overflow: hidden;
 }
 
 .video-container {
   position: relative;
+  width: 100%;
+  aspect-ratio: 4/3;
   background: #000;
-  aspect-ratio: 16/9;
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 20px;
 }
 
-.video-container video {
+video {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -112,13 +122,18 @@ body {
 
 .video-placeholder {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
+  font-size: 1.1rem;
+  text-align: center;
 }
 
 .video-placeholder.hidden {
@@ -129,156 +144,86 @@ body {
   width: 64px;
   height: 64px;
   margin-bottom: 16px;
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
 .video-controls {
-  padding: 20px;
-  border-top: 1px solid var(--border);
-  background: var(--surface-alt);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .video-settings {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding: 12px;
-  background: var(--surface);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
+  display: flex;
+  gap: 15px;
+  align-items: end;
+}
+
+@media (max-width: 640px) {
+  .video-settings {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
 }
 
 .setting-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex: 1;
 }
 
 .setting-group label {
-  font-size: 0.85rem;
+  display: block;
+  margin-bottom: 5px;
   font-weight: 500;
   color: var(--text);
 }
 
 .setting-select {
-  padding: 6px 8px;
-  border: 1px solid var(--border);
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
-  font-size: 0.85rem;
-  cursor: pointer;
-  touch-action: manipulation;
-  min-height: 40px;
+  font-size: 14px;
+  transition: border-color 0.2s;
 }
 
 .setting-select:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgb(37 99 235 / 0.1);
 }
 
 .connect-section {
   display: flex;
+  gap: 15px;
   align-items: center;
-  gap: 12px;
 }
 
-.connect-section button {
-  flex-shrink: 0;
+@media (max-width: 640px) {
+  .connect-section {
+    flex-direction: column;
+    gap: 10px;
+  }
 }
 
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--secondary);
-  transition: background-color 0.2s;
-}
-
-.status-dot.idle { background: var(--secondary); }
-.status-dot.connecting { background: var(--warning); animation: pulse 2s infinite; }
-.status-dot.connected { background: var(--success); }
-.status-dot.error { background: var(--danger); }
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.controls-section {
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-  padding: 24px;
-}
-
-.control-group {
-  margin-bottom: 24px;
-}
-
-.control-group:last-child {
-  margin-bottom: 0;
-}
-
-.control-group h3 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin: 0 0 12px 0;
-  color: var(--text);
-}
-
-.led-controls {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-.pin-input {
-  display: flex;
+.btn {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-}
-
-.pin-input label {
+  padding: 12px 20px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 14px;
   font-weight: 500;
-  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
   white-space: nowrap;
 }
 
-.button-group {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-button {
-  padding: 10px 16px;
-  border: none;
-  border-radius: var(--radius);
-  font-weight: 500;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 40px;
-  flex: 1;
-}
-
-button:disabled {
-  opacity: 0.6;
+.btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -289,8 +234,15 @@ button:disabled {
 
 .btn-primary:hover:not(:disabled) {
   background: var(--primary-hover);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-lg);
+}
+
+.btn-secondary {
+  background: var(--secondary);
+  color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #4b5563;
 }
 
 .btn-success {
@@ -300,7 +252,6 @@ button:disabled {
 
 .btn-success:hover:not(:disabled) {
   background: var(--success-hover);
-  transform: translateY(-1px);
 }
 
 .btn-danger {
@@ -310,693 +261,150 @@ button:disabled {
 
 .btn-danger:hover:not(:disabled) {
   background: var(--danger-hover);
-  transform: translateY(-1px);
 }
 
-.btn-secondary {
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transition: background-color 0.3s;
+}
+
+.status-dot.idle {
+  background: var(--secondary);
+}
+
+.status-dot.connecting {
+  background: var(--warning);
+  animation: pulse 2s infinite;
+}
+
+.status-dot.connected {
+  background: var(--success);
+}
+
+.status-dot.error {
+  background: var(--danger);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.controls-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.control-group {
   background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.control-group h3 {
+  margin: 0 0 15px 0;
+  font-size: 1.2rem;
+  font-weight: 600;
   color: var(--text);
-  border: 1px solid var(--border);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: var(--surface-alt);
-  transform: translateY(-1px);
-}
-
-input[type="number"] {
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 0.9rem;
-  background: var(--surface);
-  color: var(--text);
-  width: 80px;
-  text-align: center;
-  touch-action: manipulation;
-}
-
-input[type="number"]:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgb(37 99 235 / 0.1);
-}
-
-.log-container {
-  background: #0f172a;
-  border-radius: var(--radius);
-  padding: 16px;
-  height: 200px;
-  overflow-y: auto;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-  font-size: 0.85rem;
-  line-height: 1.4;
-  color: #e2e8f0;
-  border: 1px solid var(--border);
 }
 
 .boats-container {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px;
-  min-height: 100px;
-  background: var(--surface-alt);
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .boat-item {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 8px;
+  align-items: center;
+  padding: 12px;
   margin-bottom: 8px;
-  background: var(--surface);
+  background: var(--surface-alt);
   border-radius: var(--radius);
   border: 1px solid var(--border);
 }
 
+.boat-item:last-child {
+  margin-bottom: 0;
+}
+
 .boat-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex: 1;
 }
 
 .boat-name {
   font-weight: 600;
   color: var(--text);
+  margin-bottom: 4px;
 }
 
 .boat-details {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: var(--text-secondary);
 }
 
 .boat-status {
+  padding: 20px;
+  text-align: center;
   color: var(--text-secondary);
   font-style: italic;
-  text-align: center;
-  padding: 20px;
 }
 
-.boat-connect-btn {
-  padding: 6px 12px;
-  font-size: 0.8rem;
-  min-height: 32px;
+.log-container {
+  background: #1a1a1a;
+  color: #e5e5e5;
+  padding: 15px;
+  border-radius: var(--radius);
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .log-container::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 .log-container::-webkit-scrollbar-track {
-  background: transparent;
+  background: #2a2a2a;
+  border-radius: 4px;
 }
 
 .log-container::-webkit-scrollbar-thumb {
-  background: #475569;
-  border-radius: 3px;
+  background: #4a4a4a;
+  border-radius: 4px;
 }
 
-.demo-mode {
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-  border: 1px solid #f59e0b;
-  border-radius: var(--radius);
-  padding: 12px;
-  margin-bottom: 16px;
-  font-size: 0.9rem;
-  color: #92400e;
+.log-container::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
 }
 
-.demo-mode strong {
-  color: #78350f;
-}
-
-.motor-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.speed-control {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.speed-control label {
-  font-weight: 500;
-  color: var(--text);
-  white-space: nowrap;
-}
-
-.speed-slider {
-  flex: 1;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--border);
-  outline: none;
-  -webkit-appearance: none;
-  touch-action: manipulation;
-}
-
-.speed-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--primary);
-  cursor: pointer;
-  border: 2px solid var(--surface);
-  box-shadow: var(--shadow);
-}
-
-.speed-slider::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--primary);
-  cursor: pointer;
-  border: 2px solid var(--surface);
-  box-shadow: var(--shadow);
-}
-
-#speed-value {
-  font-weight: 600;
-  color: var(--primary);
-  min-width: 40px;
-  text-align: center;
-}
-
-.movement-grid {
+/* Control buttons */
+.control-buttons {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  align-items: center;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 15px;
 }
 
-.motor-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-}
-
-.motor-btn {
-  min-height: 48px;
-  font-size: 0.85rem;
-  display: flex;
-  align-items: center;
+.control-buttons .btn {
   justify-content: center;
-  gap: 6px;
-  flex-direction: column;
-}
-
-.motor-btn svg {
-  margin-bottom: 2px;
-}
-
-.motor-advanced {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.motor-btn-small {
-  min-height: 36px;
-  font-size: 0.8rem;
-  padding: 6px 12px;
-}
-
-/* Button active/pressed states */
-.motor-btn.active {
-  background: var(--primary-hover);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
-  transform: translateY(1px);
-}
-
-.motor-btn.active.btn-danger {
-  background: var(--danger-hover);
-}
-
-.motor-btn-small.active {
-  background: var(--secondary);
-  color: var(--text);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
-  transform: translateY(1px);
-}
-
-/* Fix touch behavior on mobile */
-button {
-  -webkit-tap-highlight-color: rgba(37, 99, 235, 0.2);
-  touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
-  transform: translateY(0);
-  transition: all 0.15s ease;
-}
-
-button:focus {
-  outline: none;
-}
-
-button:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-button:active {
-  transform: translateY(1px);
-}
-
-@media (max-width: 767px) {
-  body {
-    padding: 8px;
-    margin: 0;
-    min-width: 320px;
-  }
-  
-  .container {
-    max-width: 100%;
-    width: 100%;
-    margin: 0;
-    padding: 0;
-  }
-  
-  .header {
-    margin-bottom: 20px;
-    padding: 0 8px;
-  }
-  
-  .header h1 {
-    font-size: 1.5rem;
-    margin-bottom: 4px;
-  }
-  
-  .header p {
-    font-size: 1rem;
-  }
-  
-  .main-grid {
-    gap: 16px;
-    grid-template-columns: 1fr;
-    width: 100%;
-    max-width: 100%;
-  }
-  
-  .video-section {
-    margin: 0;
-    width: 100%;
-    max-width: 100%;
-    overflow: hidden;
-  }
-  
-  .video-container {
-    width: 100%;
-    max-width: 100%;
-  }
-  
-  .video-controls {
-    padding: 16px;
-  }
-  
-  .video-settings {
-    grid-template-columns: 1fr;
-    gap: 8px;
-    padding: 10px;
-    margin-bottom: 12px;
-  }
-  
-  .setting-select {
-    padding: 8px;
-    font-size: 0.9rem;
-  }
-  
-  .controls-section {
-    padding: 16px;
-    margin: 0;
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-  }
-  
-  .control-group {
-    margin-bottom: 20px;
-  }
-  
-  .control-group h3 {
-    font-size: 1rem;
-    margin-bottom: 10px;
-  }
-  
-  .button-group {
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  button {
-    flex: none;
-    width: 100%;
-    min-height: 48px;
-    min-width: 48px;
-    font-size: 0.9rem;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: rgba(37, 99, 235, 0.2);
-    cursor: pointer;
-    pointer-events: auto;
-    -webkit-user-select: none;
-    user-select: none;
-  }
-  
-  .connect-section {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-  }
-  
-  .pin-input {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
-  }
-  
-  .pin-input label {
-    text-align: left;
-  }
-  
-  input[type="number"] {
-    width: 100%;
-    max-width: 100px;
-    text-align: center;
-  }
-  
-  /* Motor control mobile adjustments */
-  .motor-controls {
-    gap: 12px;
-  }
-  
-  .speed-control {
-    flex-direction: column;
-    gap: 8px;
-    align-items: stretch;
-  }
-  
-  .speed-control label {
-    text-align: left;
-  }
-  
-  .speed-slider {
-    width: 100%;
-  }
-  
-  #speed-value {
-    text-align: center;
-    font-size: 1.1rem;
-  }
-  
-  .movement-grid {
-    gap: 6px;
-  }
-  
-  .motor-row {
-    gap: 6px;
-  }
-  
-  .motor-btn {
-    min-height: 52px;
-    font-size: 0.8rem;
-    padding: 8px 4px;
-  }
-  
-  .motor-btn svg {
-    width: 18px;
-    height: 18px;
-  }
-  
-  .motor-advanced {
-    gap: 6px;
-  }
-  
-  .motor-btn-small {
-    min-height: 44px;
-    font-size: 0.75rem;
-    padding: 8px 6px;
-  }
-  
-  .motor-btn-small svg {
-    width: 16px;
-    height: 16px;
-  }
-  
-  .log-container {
-    height: 150px;
-    font-size: 0.8rem;
-    padding: 12px;
-  }
-  
-  /* Fix any potential overflow issues */
-  * {
-    max-width: 100%;
-  }
-  
-  /* Prevent button transforms from breaking layout on mobile */
-  .motor-btn, .motor-btn-small {
-    -webkit-tap-highlight-color: rgba(37, 99, 235, 0.3);
-    touch-action: manipulation;
-    cursor: pointer;
-  }
-  
-  .motor-btn:active, .motor-btn-small:active {
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
-    background-color: var(--primary-hover);
-  }
-  
-  .motor-btn.active, .motor-btn-small.active {
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
-  }
-  
-  /* Ensure buttons are properly sized for touch */
-  .motor-btn {
-    min-height: 48px !important;
-    min-width: 48px;
-  }
-  
-  .motor-btn-small {
-    min-height: 44px !important;
-    min-width: 44px;
-  }
-  
-  .demo-mode {
-    padding: 10px;
-    font-size: 0.85rem;
-    margin-bottom: 12px;
-  }
-}
-
-/* Small mobile devices (375px and below) */
-@media (max-width: 375px) {
-  body {
-    padding: 2px;
-    font-size: 14px;
-  }
-  
-  .container {
-    padding: 0;
-    margin: 0;
-  }
-  
-  .header {
-    padding: 0 4px;
-    margin-bottom: 12px;
-  }
-  
-  .header h1 {
-    font-size: 1.3rem;
-    margin-bottom: 2px;
-  }
-  
-  .header p {
-    font-size: 0.9rem;
-  }
-  
-  .main-grid {
-    gap: 12px;
-  }
-  
-  .video-controls {
-    padding: 10px;
-  }
-  
-  .video-settings {
-    grid-template-columns: 1fr;
-    gap: 6px;
-    padding: 8px;
-    margin-bottom: 10px;
-  }
-  
-  .setting-select {
-    padding: 6px;
-    font-size: 0.8rem;
-    min-height: 36px;
-  }
-  
-  .connect-section {
-    gap: 6px;
-  }
-  
-  button {
-    min-height: 44px;
-    font-size: 0.8rem;
-    padding: 8px 12px;
-  }
-  
-  .controls-section {
-    padding: 10px;
-  }
-  
-  .control-group {
-    margin-bottom: 14px;
-  }
-  
-  .control-group h3 {
-    font-size: 0.95rem;
-    margin-bottom: 8px;
-  }
-  
-  /* Motor controls for 375px */
-  .speed-control {
-    gap: 6px;
-  }
-  
-  #speed-value {
-    font-size: 1rem;
-    min-width: 35px;
-  }
-  
-  .movement-grid {
-    gap: 4px;
-  }
-  
-  .motor-row {
-    gap: 4px;
-  }
-  
-  .motor-btn {
-    min-height: 44px !important;
-    min-width: 44px;
-    font-size: 0.7rem;
-    padding: 4px 2px;
-  }
-  
-  .motor-btn svg {
-    width: 14px;
-    height: 14px;
-    margin-bottom: 1px;
-  }
-  
-  .motor-advanced {
-    gap: 4px;
-  }
-  
-  .motor-btn-small {
-    min-height: 38px !important;
-    min-width: 38px;
-    font-size: 0.65rem;
-    padding: 4px 2px;
-  }
-  
-  .motor-btn-small svg {
-    width: 12px;
-    height: 12px;
-  }
-  
-  .log-container {
-    height: 100px;
-    font-size: 0.7rem;
-    padding: 8px;
-    line-height: 1.3;
-  }
-  
-  /* LED controls */
-  .pin-input input {
-    max-width: 80px;
-    padding: 6px 8px;
-  }
-  
-  /* Status indicator */
-  .status-indicator {
-    font-size: 0.8rem;
-  }
-  
-  .status-dot {
-    width: 6px;
-    height: 6px;
-  }
-}
-
-/* Extra small mobile devices */
-@media (max-width: 480px) {
-  body {
-    padding: 4px;
-  }
-  
-  .header {
-    padding: 0 4px;
-  }
-  
-  .header h1 {
-    font-size: 1.4rem;
-  }
-  
-  .video-controls {
-    padding: 12px;
-  }
-  
-  .controls-section {
-    padding: 12px;
-  }
-  
-  .control-group {
-    margin-bottom: 16px;
-  }
-  
-  .motor-btn {
-    min-height: 48px;
-    font-size: 0.75rem;
-    padding: 6px 2px;
-  }
-  
-  .motor-btn svg {
-    width: 16px;
-    height: 16px;
-  }
-  
-  .motor-btn-small {
-    min-height: 40px;
-    font-size: 0.7rem;
-    padding: 6px 4px;
-  }
-  
-  .motor-btn-small svg {
-    width: 14px;
-    height: 14px;
-  }
-  
-  .log-container {
-    height: 120px;
-    font-size: 0.75rem;
-    padding: 10px;
-  }
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f172a;
-    --surface: #1e293b;
-    --surface-alt: #334155;
-    --text: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --border: #475569;
-  }
+  padding: 8px 12px;
+  font-size: 13px;
 }
 </style>
 </head>
@@ -1004,7 +412,7 @@ button:active {
 <div class="container">
   <header class="header">
     <h1>Harbor Relay Server</h1>
-    <p>WebRTC boat camera streaming relay</p>
+    <p>WebRTC boat camera streaming relay with WebSocket control</p>
   </header>
 
   <div class="main-grid">
@@ -1016,7 +424,7 @@ button:active {
             <path d="M4 6.75A2.75 2.75 0 016.75 4h10.5A2.75 2.75 0 0120 6.75v10.5A2.75 2.75 0 0117.25 20H6.75A2.75 2.75 0 014 17.25V6.75zM6.75 5.5c-.69 0-1.25.56-1.25 1.25v10.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25V6.75c0-.69-.56-1.25-1.25-1.25H6.75z"/>
             <path d="M9.5 8.5a1 1 0 100 2 1 1 0 000-2zM8 8.5a2.5 2.5 0 115 0 2.5 2.5 0 01-5 0zM14 16l-2.5-3.125L9 16h5z"/>
           </svg>
-          <div>Click Connect to start streaming</div>
+          <div>Select a boat and click Connect</div>
         </div>
       </div>
       <div class="video-controls">
@@ -1028,22 +436,22 @@ button:active {
             </select>
           </div>
           <div class="setting-group">
-            <button id="refresh-boats" class="btn-secondary">
+            <button id="refresh-boats" class="btn btn-secondary">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                <path d="M4 12a8 8 0 018-8V2.5L14.5 5 12 7.5V6a6 6 0 100 12 6 6 0 006-6h2a8 8 0 01-16 0z"/>
               </svg>
               Refresh
             </button>
           </div>
         </div>
         <div class="connect-section">
-          <button id="connect" class="btn-primary">
+          <button id="connect" class="btn btn-primary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2L2 7v10c0 5.55 3.84 9.95 9 11 5.16-1.05 9-5.45 9-11V7l-10-5z"/>
             </svg>
             Connect
           </button>
-          <button id="disconnect" class="btn-secondary" style="display: none;">
+          <button id="disconnect" class="btn btn-danger" style="display: none;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/>
             </svg>
@@ -1062,6 +470,21 @@ button:active {
         <h3>Available Boats</h3>
         <div id="boats-list" class="boats-container">
           <div class="boat-status">Loading boats...</div>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <h3>Boat Controls</h3>
+        <div class="control-buttons">
+          <button class="btn btn-success" onclick="sendLEDControl('on')">LED On</button>
+          <button class="btn btn-secondary" onclick="sendLEDControl('off')">LED Off</button>
+          <button class="btn btn-warning" onclick="sendLEDControl('blink')">LED Blink</button>
+          <button class="btn btn-primary" onclick="sendMotorControl('forward', 0.5, 2)">Forward</button>
+          <button class="btn btn-primary" onclick="sendMotorControl('backward', 0.5, 2)">Backward</button>
+          <button class="btn btn-primary" onclick="sendMotorControl('left', 0.5, 1)">Left</button>
+          <button class="btn btn-primary" onclick="sendMotorControl('right', 0.5, 1)">Right</button>
+          <button class="btn btn-danger" onclick="sendMotorControl('stop')">Stop</button>
+          <button class="btn btn-secondary" onclick="sendBoatCommand('status')">Status</button>
         </div>
       </div>
 
@@ -1091,11 +514,14 @@ let ws = null;
 let isConnecting = false;
 let availableBoats = [];
 let selectedBoatId = null;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+let reconnectDelay = 2000;
 
 // Utility functions
 function log(...args) {
   const timestamp = new Date().toLocaleTimeString();
-  logEl.textContent += `[${timestamp}] ${args.join(' ')}\\n`;
+  logEl.textContent += `[${timestamp}] ${args.join(' ')}\n`;
   logEl.scrollTop = logEl.scrollHeight;
 }
 
@@ -1109,7 +535,7 @@ function updateUI(connecting) {
   const isConnected = pc && (pc.iceConnectionState === 'connected' || pc.connectionState === 'connected');
   
   // Update connect button
-  connectBtn.disabled = connecting || isConnected || !selectedBoatId;
+  connectBtn.disabled = connecting || isConnected || !selectedBoatId || !ws || ws.readyState !== WebSocket.OPEN;
   connectBtn.innerHTML = connecting 
     ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Connecting...'
     : '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7v10c0 5.55 3.84 9.95 9 11 5.16-1.05 9-5.45 9-11V7l-10-5z"/></svg>Connect';
@@ -1128,23 +554,146 @@ function updateUI(connecting) {
   refreshBoatsBtn.disabled = connecting || isConnected;
 }
 
-// Boat management functions
-async function loadBoats() {
-  try {
-    const response = await fetch('/boats');
-    if (!response.ok) {
-      throw new Error(`Failed to load boats: ${response.status}`);
+// WebSocket connection management
+function connectWebSocket() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/ws`;
+  
+  log('🔌 Connecting to WebSocket:', wsUrl);
+  ws = new WebSocket(wsUrl);
+  
+  ws.onopen = () => {
+    log('✅ WebSocket connected to Harbor server');
+    reconnectAttempts = 0;
+    reconnectDelay = 2000;
+    updateStatus('idle', 'WebSocket Connected');
+    updateUI(false);
+  };
+  
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      handleWebSocketMessage(data);
+    } catch (error) {
+      log('❌ Failed to parse WebSocket message:', error.message);
     }
-    
-    const data = await response.json();
+  };
+  
+  ws.onclose = () => {
+    log('❌ WebSocket disconnected');
+    updateStatus('error', 'WebSocket Disconnected');
+    scheduleReconnect();
+  };
+  
+  ws.onerror = (error) => {
+    log('❌ WebSocket error:', error);
+  };
+}
+
+function scheduleReconnect() {
+  if (reconnectAttempts < maxReconnectAttempts) {
+    reconnectAttempts++;
+    log(`🔄 Reconnecting WebSocket in ${reconnectDelay}ms (attempt ${reconnectAttempts})`);
+    setTimeout(() => connectWebSocket(), reconnectDelay);
+    reconnectDelay *= 1.5; // Exponential backoff
+  } else {
+    log('❌ Max reconnection attempts reached');
+    updateStatus('error', 'Connection Failed');
+  }
+}
+
+function sendWebSocketMessage(data) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(data));
+    return true;
+  } else {
+    log('❌ WebSocket not connected, cannot send message');
+    return false;
+  }
+}
+
+// WebSocket message handling
+function handleWebSocketMessage(data) {
+  const msgType = data.type;
+  
+  if (msgType === 'boats_available') {
     availableBoats = data.boats || [];
     updateBoatsList();
     updateBoatSelect();
-    log(`Loaded ${availableBoats.length} boats`);
+    log(`📋 Loaded ${availableBoats.length} boats`);
+  } else if (msgType === 'webrtc_offer') {
+    handleWebRTCOffer(data);
+  } else if (msgType === 'stream_response') {
+    handleStreamResponse(data);
+  } else if (msgType === 'command_response') {
+    handleCommandResponse(data);
+  } else {
+    log('❓ Unknown WebSocket message type:', msgType);
+  }
+}
+
+async function handleWebRTCOffer(data) {
+  if (!pc) {
+    log('❌ Received WebRTC offer but no peer connection exists');
+    return;
+  }
+  
+  try {
+    log('📨 Received WebRTC offer from boat', data.boat_id);
+    
+    const offer = new RTCSessionDescription({
+      sdp: data.sdp,
+      type: data.offer_type || 'offer'
+    });
+    
+    await pc.setRemoteDescription(offer);
+    log('✅ Set remote description from boat offer');
+    
+    // Create answer
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    
+    // Send answer back to boat via server
+    sendWebSocketMessage({
+      type: 'webrtc_answer',
+      boat_id: data.boat_id,
+      sdp: answer.sdp,
+      type: answer.type
+    });
+    
+    log('📤 Sent WebRTC answer to boat');
     
   } catch (error) {
-    log('Failed to load boats:', error.message);
-    boatsListEl.innerHTML = '<div class="boat-status">Failed to load boats</div>';
+    log('❌ Failed to handle WebRTC offer:', error.message);
+    updateStatus('error', 'WebRTC Setup Failed');
+    cleanup();
+  }
+}
+
+function handleStreamResponse(data) {
+  if (data.success) {
+    log(`✅ Stream request successful for boat ${data.boat_id}`);
+  } else {
+    log(`❌ Stream request failed for boat ${data.boat_id}`);
+    updateStatus('error', 'Stream request failed');
+    cleanup();
+  }
+}
+
+function handleCommandResponse(data) {
+  if (data.success) {
+    log(`✅ Command ${data.command_type} successful for boat ${data.boat_id}`);
+  } else {
+    log(`❌ Command ${data.command_type} failed for boat ${data.boat_id}: ${data.error}`);
+  }
+}
+
+// Boat management functions
+function loadBoats() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    sendWebSocketMessage({ type: 'list_boats' });
+  } else {
+    log('❌ Cannot load boats - WebSocket not connected');
   }
 }
 
@@ -1160,10 +709,10 @@ function updateBoatsList() {
         <div class="boat-name">${boat.boat_id}</div>
         <div class="boat-details">
           ${boat.capabilities.width}x${boat.capabilities.height} @ ${boat.capabilities.fps}fps
-          ${boat.connected ? '✓ Connected' : '✗ Offline'}
+          ${boat.connected ? '✅ Connected' : '❌ Offline'}
         </div>
       </div>
-      <button class="btn-primary boat-connect-btn" 
+      <button class="btn btn-primary boat-connect-btn" 
               onclick="selectBoat('${boat.boat_id}')"
               ${!boat.connected ? 'disabled' : ''}>
         Select
@@ -1200,30 +749,41 @@ function selectBoat(boatId) {
   selectedBoatId = boatId;
   boatSelect.value = boatId;
   updateUI(false);
-  log(`Selected boat: ${boatId}`);
+  log(`🎯 Selected boat: ${boatId}`);
 }
 
 // Main connection function
 async function start() {
   if (pc || isConnecting) {
-    log('Connection already exists or in progress');
+    log('❌ Connection already exists or in progress');
     return;
   }
   
   if (!selectedBoatId) {
-    log('No boat selected');
+    log('❌ No boat selected');
+    return;
+  }
+  
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    log('❌ WebSocket not connected');
     return;
   }
   
   updateStatus('connecting', 'Connecting...');
   updateUI(true);
-  log(`Starting connection to boat ${selectedBoatId}...`);
+  log(`🚀 Starting connection to boat ${selectedBoatId}...`);
 
   try {
-    pc = new RTCPeerConnection({iceServers: []});
+    // Create WebRTC peer connection
+    pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' }
+      ]
+    });
     
+    // Setup WebRTC event handlers
     pc.oniceconnectionstatechange = () => {
-      log('WebRTC ICE state:', pc.iceConnectionState);
+      log('🔗 WebRTC ICE state:', pc.iceConnectionState);
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         updateStatus('connected', 'Connected');
         videoPlaceholder.classList.add('hidden');
@@ -1238,7 +798,7 @@ async function start() {
     };
     
     pc.onconnectionstatechange = () => {
-      log('WebRTC connection state:', pc.connectionState);
+      log('🔗 WebRTC connection state:', pc.connectionState);
       if (pc.connectionState === 'connected') {
         updateStatus('connected', 'Connected');
         updateUI(false);
@@ -1249,7 +809,7 @@ async function start() {
     };
     
     pc.ontrack = (ev) => {
-      log('Received video stream from boat');
+      log('📹 Received video stream from boat');
       videoEl.srcObject = ev.streams[0];
       videoPlaceholder.classList.add('hidden');
     };
@@ -1257,42 +817,72 @@ async function start() {
     // Request video stream
     pc.addTransceiver('video', {direction: 'recvonly'});
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    // Send offer to relay server with boat ID
-    const response = await fetch('/offer', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        sdp: offer.sdp, 
-        type: offer.type,
-        boat_id: selectedBoatId
-      })
+    // Request stream from boat via WebSocket
+    sendWebSocketMessage({
+      type: 'request_stream',
+      boat_id: selectedBoatId
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Server error ${response.status}: ${errorText}`);
-    }
-
-    const answer = await response.json();
     
-    // Check if response contains an error
-    if (answer.error) {
-      throw new Error(answer.error);
-    }
-    
-    await pc.setRemoteDescription(answer);
-    log(`Connected to boat ${selectedBoatId} via relay`);
+    log('📤 Sent stream request to server');
     
   } catch (error) {
-    log('Connection failed:', error.message);
+    log('❌ Connection failed:', error.message);
     updateStatus('error', 'Connection failed');
     cleanup();
   }
   
   updateUI(false);
+}
+
+// Control functions
+function sendLEDControl(action, ledId = 'status', duration = 1.0) {
+  if (!selectedBoatId) {
+    log('❌ No boat selected for LED control');
+    return;
+  }
+  
+  sendWebSocketMessage({
+    type: 'led_control',
+    boat_id: selectedBoatId,
+    action: action,
+    led_id: ledId,
+    duration: duration
+  });
+  
+  log(`💡 Sent LED control: ${action} ${ledId}`);
+}
+
+function sendMotorControl(action, speed = 0.5, duration = 0) {
+  if (!selectedBoatId) {
+    log('❌ No boat selected for motor control');
+    return;
+  }
+  
+  sendWebSocketMessage({
+    type: 'motor_control',
+    boat_id: selectedBoatId,
+    action: action,
+    speed: speed,
+    duration: duration
+  });
+  
+  log(`🚤 Sent motor control: ${action} at speed ${speed}`);
+}
+
+function sendBoatCommand(command, params = {}) {
+  if (!selectedBoatId) {
+    log('❌ No boat selected for command');
+    return;
+  }
+  
+  sendWebSocketMessage({
+    type: 'boat_command',
+    boat_id: selectedBoatId,
+    command: command,
+    params: params
+  });
+  
+  log(`⚙️ Sent boat command: ${command}`);
 }
 
 // Cleanup function
@@ -1335,11 +925,11 @@ function cleanup() {
 
 // Disconnect function
 function disconnect() {
-  log('Disconnecting...');
+  log('🔌 Disconnecting...');
   updateStatus('disconnecting', 'Disconnecting...');
   cleanup();
   updateStatus('idle', 'Idle');
-  log('Disconnected');
+  log('✅ Disconnected');
 }
 
 // Event listeners
@@ -1351,31 +941,62 @@ refreshBoatsBtn.addEventListener('click', loadBoats);
 boatSelect.addEventListener('change', (e) => {
   selectedBoatId = e.target.value;
   updateUI(false);
-  log(`Selected boat: ${selectedBoatId}`);
+  log(`🎯 Selected boat: ${selectedBoatId}`);
 });
 
-// Initialize UI
-updateStatus('idle', 'Idle');
-updateUI(false);
-log('Harbor relay client initialized');
-log('Loading available boats...');
+// Keyboard controls (for testing)
+document.addEventListener('keydown', (e) => {
+  if (!selectedBoatId) return;
+  
+  switch(e.key) {
+    case 'l': sendLEDControl('on'); break;
+    case 'L': sendLEDControl('off'); break;
+    case 'b': sendLEDControl('blink'); break;
+    case 'w': sendMotorControl('forward', 0.5, 2); break;
+    case 's': sendMotorControl('backward', 0.5, 2); break;
+    case 'a': sendMotorControl('left', 0.5, 1); break;
+    case 'd': sendMotorControl('right', 0.5, 1); break;
+    case ' ': sendMotorControl('stop'); break;
+    case 'r': sendBoatCommand('status'); break;
+  }
+});
 
-// Load boats on startup
-loadBoats();
+// Initialize
+updateStatus('connecting', 'Connecting...');
+updateUI(false);
+log('🚢 Harbor relay client initialized');
+log('🔌 Connecting to WebSocket...');
+
+// Connect WebSocket on startup
+connectWebSocket();
 
 // Refresh boats every 30 seconds
-setInterval(loadBoats, 30000);
+setInterval(() => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    loadBoats();
+  }
+}, 30000);
 
 // Cleanup on page unload
-window.addEventListener('beforeunload', cleanup);
+window.addEventListener('beforeunload', () => {
+  cleanup();
+  if (ws) {
+    ws.close();
+  }
+});
+
+// Add control info to log
+log('🎮 Keyboard controls: L=LED on/off, B=blink, WASD=move, Space=stop, R=status');
 </script>
+</body>
+</html>
 """
 
 
 async def index_handler(_request: web.Request):
-    """Serve the HTML client interface.
+    """Serve the HTML client interface with WebSocket-based WebRTC signaling.
     
     Returns:
         web.Response: HTML response with embedded client
     """
-    return web.Response(text=CLIENT_HTML, content_type="text/html")
+    return web.Response(text=CLIENT_HTML, content_type='text/html')

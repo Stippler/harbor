@@ -568,7 +568,7 @@ function connectWebSocket() {
     reconnectDelay = 2000;
     updateStatus('idle', 'WebSocket Connected');
     updateUI(false);
-  };
+  };A57A-2FFB
   
   ws.onmessage = (event) => {
     try {
@@ -648,22 +648,17 @@ async function handleWebRTCOffer(data) {
     
     await pc.setRemoteDescription(offer);
     log('✅ Set remote description from boat offer');
-    log('🌐 BROWSER SIGNALING: Signaling state after offer:', pc.signalingState);
-    log('🌐 BROWSER ICE: ICE connection state after offer:', pc.iceConnectionState);
     
     // Create answer
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    log('🌐 BROWSER ANSWER: Created answer - SDP length:', answer.sdp.length);
-    log('🌐 BROWSER SIGNALING: Signaling state after answer:', pc.signalingState);
-    log('🌐 BROWSER ICE: ICE gathering state after answer:', pc.iceGatheringState);
     
     // Send answer back to boat via server
     sendWebSocketMessage({
       type: 'webrtc_answer',
       boat_id: data.boat_id,
       sdp: answer.sdp,
-      answer_type: answer.type
+      type: answer.type
     });
     
     log('📤 Sent WebRTC answer to boat');
@@ -779,75 +774,36 @@ async function start() {
   log(`🚀 Starting connection to boat ${selectedBoatId}...`);
 
   try {
-    // Create WebRTC peer connection without STUN servers (direct connection mode)
-    const iceConfig = {
-      iceServers: [],                    // No STUN servers
-      iceTransportPolicy: 'all',         // Allow all ICE candidates
-      iceCandidatePoolSize: 10           // Generate more candidates
-    };
-    log('🌐 BROWSER ICE: Initializing WITHOUT STUN servers (direct connection mode)');
-    pc = new RTCPeerConnection(iceConfig);
+    // Create WebRTC peer connection (no ICE servers needed for relay architecture)
+    pc = new RTCPeerConnection({
+      iceServers: []  // No STUN servers - direct connection to VPS
+    });
     
-    // Setup comprehensive WebRTC event handlers
+    // Setup WebRTC event handlers
     pc.oniceconnectionstatechange = () => {
-      log('🌐 BROWSER ICE: ICE connection state changed:', pc.iceConnectionState);
+      log('🔗 WebRTC ICE state:', pc.iceConnectionState);
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         updateStatus('connected', 'Connected');
         videoPlaceholder.classList.add('hidden');
         updateUI(false);
-        log('🌐 BROWSER ICE: ICE connection established successfully!');
-      } else if (pc.iceConnectionState === 'failed') {
-        log('❌ BROWSER ICE: ICE connection failed - check STUN servers and firewall');
-        updateStatus('error', 'ICE Connection Failed');
-        cleanup();
-      } else if (pc.iceConnectionState === 'closed') {
-        log('🌐 BROWSER ICE: ICE connection closed');
-        updateStatus('error', 'Connection closed');
+      } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
+        updateStatus('error', 'Connection failed');
         cleanup();
       } else if (pc.iceConnectionState === 'disconnected') {
-        log('⚠️ BROWSER ICE: ICE connection disconnected');
         updateStatus('error', 'Disconnected');
         cleanup();
-      } else if (pc.iceConnectionState === 'checking') {
-        log('🔍 BROWSER ICE: ICE connection checking - waiting for connectivity');
-        updateStatus('connecting', 'Checking connectivity...');
       }
     };
     
     pc.onconnectionstatechange = () => {
-      log('🌐 BROWSER CONNECTION: Connection state changed:', pc.connectionState);
+      log('🔗 WebRTC connection state:', pc.connectionState);
       if (pc.connectionState === 'connected') {
         updateStatus('connected', 'Connected');
         updateUI(false);
-        log('🌐 BROWSER CONNECTION: WebRTC connection fully established!');
-      } else if (pc.connectionState === 'failed') {
-        log('❌ BROWSER CONNECTION: WebRTC connection failed');
+      } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         updateStatus('error', 'Connection failed');
         cleanup();
-      } else if (pc.connectionState === 'closed') {
-        log('🌐 BROWSER CONNECTION: WebRTC connection closed');
-        updateStatus('error', 'Connection closed');
-        cleanup();
-      } else if (pc.connectionState === 'connecting') {
-        log('🔍 BROWSER CONNECTION: WebRTC connecting...');
-        updateStatus('connecting', 'Connecting...');
       }
-    };
-    
-    pc.onicegatheringstatechange = () => {
-      log('🌐 BROWSER ICE: ICE gathering state:', pc.iceGatheringState);
-    };
-    
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        log('🌐 BROWSER ICE: Generated ICE candidate:', event.candidate.candidate);
-      } else {
-        log('🌐 BROWSER ICE: ICE candidate gathering complete');
-      }
-    };
-    
-    pc.onsignalingstatechange = () => {
-      log('🌐 BROWSER SIGNALING: Signaling state:', pc.signalingState);
     };
     
     pc.ontrack = (ev) => {

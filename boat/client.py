@@ -84,12 +84,12 @@ class BoatClient:
         
         try:
             
-            # Initialize WebRTC peer connection without STUN servers (local network only)
-            # This works if both devices are on the same network or have direct connectivity
+            # Initialize WebRTC peer connection for relay architecture
+            # Direct connection to VPS - no ICE/STUN needed
             ice_config = RTCConfiguration(
-                iceServers=[],  # No STUN servers - direct connection only
+                iceServers=[],  # No STUN servers - direct connection to VPS
             )
-            logging.info("🚤 BOAT ICE: Initializing peer connection WITHOUT STUN servers (direct connection mode)")
+            logging.info("🚤 BOAT ICE: Initializing peer connection for relay architecture (direct to VPS)")
             self.pc = RTCPeerConnection(configuration=ice_config)
             
             # Setup camera track
